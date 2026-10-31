@@ -5,6 +5,7 @@ Ingredient-first recipe discovery: enter what you have and find recipes ranked b
 ## Requirements
 
 - Node.js 20 or newer and npm
+- Docker Compose v2 for the local graph environment
 
 ## Development setup
 
@@ -16,6 +17,26 @@ npm run check
 `npm run check` runs ESLint, TypeScript type-checking, and the Vitest suite.
 
 The Food.com source data and generated graph CSVs are local-only files in `data/raw/` and `data/prepared/`. They are not committed to this repository.
+
+## Run the local graph environment
+
+First acquire and prepare the local data using the steps in [the data-preparation guide](docs/data-preparation.md). Then copy `.env.example` to `.env` and set `NEO4J_PASSWORD` to a strong local password:
+
+```sh
+cp .env.example .env
+# Edit .env and set NEO4J_PASSWORD.
+docker compose up --build
+```
+
+Compose starts Neo4j and imports the prepared graph data after the database is healthy. Wait for the importer to report success, then stop the attached services with Ctrl-C. Neo4j data and the Compose import marker persist across normal stops, so later starts skip an import that already succeeded.
+
+To intentionally rebuild the local graph from prepared CSVs, stop the services and remove both persistent volumes:
+
+```sh
+docker compose down -v
+```
+
+This deletes the local Neo4j graph and its import marker. Do not remove only one volume. The importer refuses to load into a non-empty graph that lacks the Compose completion marker.
 
 ## Dataset source verification
 
@@ -50,6 +71,6 @@ See [the data-preparation guide](docs/data-preparation.md) for the CSV contracts
 
 ## Project scope
 
-This repository is being built in release order. The first change establishes the data preparation and Neo4j import foundation; later changes add the Compose environment, recipe search, and web application.
+This repository is being built in release order. The first changes establish data preparation, Neo4j import, and the local Compose graph environment; later changes add recipe search and the web application.
 
 See [the product requirements](docs/prd.md), [the graph data model](docs/data-model.md), and [the architecture](docs/architecture.md).

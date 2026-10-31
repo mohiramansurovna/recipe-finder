@@ -1,0 +1,13 @@
+.git
+.venv
+node_modules
+coverage
+dist
+data/raw
+data/prepared
+tests
+openspec
+docs
+.env
+.env.*
+!.env.example

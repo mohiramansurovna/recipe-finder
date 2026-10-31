@@ -40,9 +40,31 @@ For version 2, the valid non-negative cooking-time distribution has nearest-rank
 
 Both `data/raw/` and `data/prepared/` are local-only and ignored by Git. Review dataset terms before distributing generated CSVs.
 
+## Run the local Compose environment
+
+Docker Compose v2 is required. After preparing `data/prepared/`, copy the tracked environment template and set a strong local password:
+
+```sh
+cp .env.example .env
+# Edit .env and set NEO4J_PASSWORD.
+docker compose up --build
+```
+
+Neo4j is available on Bolt port `7687`, bound to loopback by default. The importer connects over the private Compose network and reads `data/prepared/` read-only. Set `PREPARED_DATA_DIR` in `.env` to use another prepared-data directory; `NEO4J_BOLT_PORT` changes the local host port, and `NEO4J_DATABASE` selects the database.
+
+Wait for the importer to report success before stopping the attached services with Ctrl-C. Neo4j and the Compose import marker use persistent volumes, so a later `docker compose up` reuses the graph and skips the successful import. A populated graph without the marker is not assumed to be initialized by Compose: the importer fails with the fresh-database error and leaves existing data intact. Direct `npm run import:data` invocations always retain this fresh-database guard.
+
+To rebuild the graph after changing prepared data, stop the services and delete both persistent volumes:
+
+```sh
+docker compose down -v
+```
+
+This permanently removes the local graph and its Compose import marker. Removing only one volume can leave the marker and graph out of sync.
+
 ## Import into Neo4j
 
-The importer requires a reachable Neo4j database and a graph with no nodes. It validates all prepared CSVs before connecting, checks the selected database is empty before adding constraints or data, and creates uniqueness constraints for recipe IDs and ingredient names. It batches node and relationship writes in groups of 1,000. Missing cooking times remain unset as the Neo4j `minutes` property.
+For a local Compose environment, follow [Run the local Compose environment](#run-the-local-compose-environment). The direct importer workflow below is for a separately managed, reachable Neo4j database and always requires an empty graph. It validates all prepared CSVs before connecting, checks the selected database is empty before adding constraints or data, and creates uniqueness constraints for recipe IDs and ingredient names. It batches node and relationship writes in groups of 1,000. Missing cooking times remain unset as the Neo4j `minutes` property.
 
 Set connection details in the process environment; do not put credentials in source files or commit them:
 

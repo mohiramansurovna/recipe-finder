@@ -12,8 +12,9 @@ browser -> Caddy -> API (Express) -> Neo4j
   Handles HTTPS in the demo.
 
 ## Environments
-- Local: docker compose up builds the database from CSV files and starts
-  the whole app.
+- Local: `docker compose up` starts Neo4j and imports prepared CSV files.
+  Data acquisition and preparation are run separately; later releases add
+  the API and frontend to the Compose stack.
 - Demo (AWS): created with Terraform, destroyed afterwards.
   - Persistent stack: S3 bucket for CSVs, OIDC role, budget alert.
   - Demo stack: EC2, security group, Elastic IP, IAM instance profile.
