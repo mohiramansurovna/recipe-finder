@@ -125,8 +125,69 @@
   background: #edf4ed;
 }
 
-.search-note {
+.recipe-search-results {
+  display: grid;
+  gap: 1rem;
   margin-top: 2rem;
+}
+
+.time-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.time-filter label {
+  font-weight: 700;
+}
+
+.time-filter select {
+  min-height: 2.5rem;
+  border: 1px solid #aeb8ac;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  color: inherit;
+  background: white;
+}
+
+.search-note {
+  margin: 0;
+  color: #526055;
+}
+
+.recipe-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.load-more-sentinel {
+  height: 1px;
+}
+
+.recipe-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid #d8dfd5;
+  border-radius: 0.75rem;
+  background: white;
+}
+
+.recipe-card h2,
+.recipe-card h3,
+.recipe-card p {
+  margin: 0;
+}
+
+.recipe-card h2 {
+  font-size: 1.25rem;
+}
+
+.recipe-card h3 {
+  font-size: 0.95rem;
+}
+
+.recipe-time {
   color: #526055;
 }
 
@@ -140,5 +201,10 @@
 @media (max-width: 520px) {
   .ingredient-suggestions {
     max-height: 12rem;
+  }
+
+  .time-filter {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

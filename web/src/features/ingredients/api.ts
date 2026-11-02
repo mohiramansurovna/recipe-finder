@@ -10,6 +10,20 @@ const parseResultSchema = z.object({
   unrecognized: z.array(z.string()),
 });
 
+const recipeSearchPageSchema = z.object({
+  recipes: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      minutes: z.number().int().nonnegative().nullable(),
+      matchedIngredients: z.array(z.string()),
+      missingIngredients: z.array(z.string()),
+      excludedIngredients: z.array(z.string()),
+    }),
+  ),
+  nextCursor: z.string().nullable(),
+});
+
 const errorResponseSchema = z.object({
   error: z.object({ message: z.string() }),
 });
@@ -47,6 +61,34 @@ export async function parseIngredients(text: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
+    },
+  );
+}
+
+export type RecipeSearchPage = z.infer<typeof recipeSearchPageSchema>;
+
+export async function searchRecipes(
+  criteria: {
+    included: readonly string[];
+    excluded: readonly string[];
+  },
+  maxMinutes: number | null,
+  cursor: string | null = null,
+  signal?: AbortSignal,
+): Promise<RecipeSearchPage> {
+  return requestJson(
+    "/api/recipes/search",
+    recipeSearchPageSchema,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        included: criteria.included,
+        excluded: criteria.excluded,
+        maxMinutes,
+        cursor,
+      }),
+      signal,
     },
   );
 }

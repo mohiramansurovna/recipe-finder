@@ -8,6 +8,8 @@ import { z } from "zod";
 
 import { parseIngredientText } from "./features/ingredients/ingredient-parser.js";
 import type { IngredientRepository } from "./features/ingredients/ingredient-repository.js";
+import { InvalidRecipeSearchCursorError } from "./features/recipes/recipe-search-cursor.js";
+import type { RecipeSearchRepository } from "./features/recipes/recipe-search-types.js";
 
 class ApiError extends Error {
   constructor(
@@ -21,6 +23,18 @@ class ApiError extends Error {
 }
 
 const parseRequestSchema = z.object({ text: z.string().max(2000) }).strict();
+const ingredientCriteriaSchema = z
+  .array(z.string().trim().min(1).max(200))
+  .max(100)
+  .refine((ingredients) => new Set(ingredients).size === ingredients.length);
+const recipeSearchRequestSchema = z
+  .object({
+    included: ingredientCriteriaSchema,
+    excluded: ingredientCriteriaSchema,
+    maxMinutes: z.union([z.literal(15), z.literal(30), z.literal(60)]).nullable().default(null),
+    cursor: z.string().min(1).max(4096).nullable().default(null),
+  })
+  .strict();
 
 function sendError(response: Response, statusCode: number, code: string, message: string) {
   response.status(statusCode).json({ error: { code, message } });
@@ -33,6 +47,7 @@ function hasErrorType(error: unknown): error is Error & { type: string } {
 export function createApiApp(
   ingredientRepository: IngredientRepository,
   rateLimitMax = 100,
+  recipeSearchRepository?: RecipeSearchRepository,
 ) {
   const app = express();
 
@@ -84,6 +99,47 @@ export function createApiApp(
           503,
           "GRAPH_UNAVAILABLE",
           "Ingredient data is temporarily unavailable.",
+          { cause: error },
+        ),
+      );
+    }
+  });
+
+  app.post("/api/recipes/search", async (request: Request, response: Response, next) => {
+    const parsedRequest = recipeSearchRequestSchema.safeParse(request.body);
+    if (!parsedRequest.success) {
+      sendError(
+        response,
+        400,
+        "INVALID_REQUEST",
+        "Provide included and excluded ingredient lists, a supported maximum time, and an optional cursor.",
+      );
+      return;
+    }
+
+    if (recipeSearchRepository === undefined) {
+      next(
+        new ApiError(
+          503,
+          "SEARCH_UNAVAILABLE",
+          "Recipe search is temporarily unavailable.",
+        ),
+      );
+      return;
+    }
+
+    try {
+      response.json(await recipeSearchRepository.search(parsedRequest.data));
+    } catch (error) {
+      if (error instanceof InvalidRecipeSearchCursorError) {
+        sendError(response, 400, "INVALID_CURSOR", error.message);
+        return;
+      }
+      next(
+        new ApiError(
+          503,
+          "GRAPH_UNAVAILABLE",
+          "Recipe data is temporarily unavailable.",
           { cause: error },
         ),
       );

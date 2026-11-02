@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { createApiApp } from "./app.js";
 import { Neo4jIngredientRepository } from "./features/ingredients/neo4j-ingredient-repository.js";
+import { Neo4jRecipeSearchRepository } from "./features/recipes/neo4j-recipe-search-repository.js";
 
 const environmentSchema = z.object({
   NEO4J_URI: z.string().min(1).default("bolt://localhost:7687"),
@@ -24,7 +25,11 @@ async function main() {
     driver,
     environment.NEO4J_DATABASE,
   );
-  const app = createApiApp(ingredientRepository);
+  const recipeSearchRepository = new Neo4jRecipeSearchRepository(
+    driver,
+    environment.NEO4J_DATABASE,
+  );
+  const app = createApiApp(ingredientRepository, 100, recipeSearchRepository);
   const server = app.listen(environment.API_PORT, "0.0.0.0", () => {
     console.log(`Recipe Graph API listening on port ${environment.API_PORT}`);
   });

@@ -43,9 +43,13 @@ The user interface SHALL display included, excluded, and unrecognized terms as d
 - **WHEN** the user adds an ingredient from the normalized vocabulary
 - **THEN** the ingredient appears in the included criteria
 
-#### Scenario: Edit criteria before recipe search exists
-- **WHEN** the user adds, removes, or toggles a chip in this release slice
-- **THEN** the displayed ingredient criteria update immediately, without claiming that recipe results were refreshed
+#### Scenario: Edit criteria before recipe results have loaded
+- **WHEN** the user adds, removes, or toggles a chip before any recipe results have loaded
+- **THEN** the displayed criteria update immediately and the initial recipe results use the updated criteria
+
+#### Scenario: Edit criteria and refresh results
+- **WHEN** the user adds, removes, or toggles a chip
+- **THEN** the displayed criteria update immediately and the recipe results refresh using the updated criteria
 
 ### Requirement: Make ingredient chips keyboard accessible
 The user interface SHALL support adding, removing, and toggling ingredient chips using keyboard interaction and expose each chip's category and available actions to assistive technology.
