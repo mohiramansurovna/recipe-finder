@@ -1,11 +1,11 @@
 # Recipe Graph
 
-Ingredient-first recipe discovery: enter what you have and find recipes ranked by the ingredients you are missing.
+Ingredient-first recipe discovery: enter what you have and review the ingredients the app recognizes. Recipe search and results are planned for the next release.
 
 ## Requirements
 
 - Node.js 20 or newer and npm
-- Docker Compose v2 for the local graph environment
+- Docker Compose v2 for the local application and graph environment
 
 ## Development setup
 
@@ -18,7 +18,29 @@ npm run check
 
 The Food.com source data and generated graph CSVs are local-only files in `data/raw/` and `data/prepared/`. They are not committed to this repository.
 
-## Run the local graph environment
+### Run the API and web in development mode
+
+Create `.env` from `.env.example` and set `NEO4J_PASSWORD`. The API loads the root `.env`; Vite uses the same file and proxies `/api` requests to `http://localhost:3000`.
+
+Start Neo4j and import the prepared data:
+
+```sh
+docker compose up neo4j importer
+```
+
+After the importer exits successfully, run the API and web dev server in separate terminals:
+
+```sh
+npm run dev:api
+```
+
+```sh
+npm run dev:web
+```
+
+Open [http://localhost:5173](http://localhost:5173). For this mode, `NEO4J_URI` in `.env` must be `bolt://localhost:7687`, because the API runs on the host. Compose overrides it to `bolt://neo4j:7687` when running the API in a container.
+
+## Run the local app
 
 First acquire and prepare the local data using the steps in [the data-preparation guide](docs/data-preparation.md). Then copy `.env.example` to `.env` and set `NEO4J_PASSWORD` to a strong local password:
 
@@ -28,15 +50,17 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose starts Neo4j and imports the prepared graph data after the database is healthy. Wait for the importer to report success, then stop the attached services with Ctrl-C. Neo4j data and the Compose import marker persist across normal stops, so later starts skip an import that already succeeded.
+Compose starts Neo4j, imports the prepared graph data, starts the API, and serves the web app through Caddy. Once the importer reports success and the API is healthy, open [http://localhost:8080](http://localhost:8080) (or the `APP_PORT` configured in `.env`). The app interprets ingredient text and lets you add, remove, and toggle ingredient chips. It does not show recipe results yet; recipe search is a separate release slice. The UI credits the Food.com Recipes and Interactions dataset and never displays contributor identities.
 
-To intentionally rebuild the local graph from prepared CSVs, stop the services and remove both persistent volumes:
+The Neo4j Bolt port and web app port are bound to loopback only. Neo4j is not exposed through the public network. Stop the attached services with Ctrl-C or run `docker compose down`; both preserve the local graph and successful-import marker, so later starts skip an import that already succeeded.
+
+To intentionally rebuild the local graph from prepared CSVs, stop the services and remove the Compose volumes:
 
 ```sh
 docker compose down -v
 ```
 
-This deletes the local Neo4j graph and its import marker. Do not remove only one volume. The importer refuses to load into a non-empty graph that lacks the Compose completion marker.
+This deletes the local Neo4j graph, import marker, and generated web assets. The graph and marker must be reset together; the importer refuses to load into a non-empty graph that lacks the Compose completion marker.
 
 ## Dataset source verification
 
@@ -71,6 +95,6 @@ See [the data-preparation guide](docs/data-preparation.md) for the CSV contracts
 
 ## Project scope
 
-This repository is being built in release order. The first changes establish data preparation, Neo4j import, and the local Compose graph environment; later changes add recipe search and the web application.
+This repository is being built in release order. The R0 changes establish data preparation, Neo4j import, and the local Compose environment. The current R1 slice adds ingredient parsing and editable chips; recipe search, ranking, pagination, and time filters are planned separately.
 
 See [the product requirements](docs/prd.md), [the graph data model](docs/data-model.md), and [the architecture](docs/architecture.md).

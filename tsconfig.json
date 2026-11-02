@@ -6,7 +6,16 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx"
   },
-  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "api/**/*.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "vite.config.ts",
+    "web/**/*.ts",
+    "web/**/*.tsx"
+  ]
 }

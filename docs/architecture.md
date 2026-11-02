@@ -2,19 +2,27 @@
 
 ## Flow
 browser -> Caddy -> API (Express) -> Neo4j
+Caddy -> built React/Vite assets
 
 ## Components
-- web: React + Vite. Built to static files and served by Caddy.
-- api: Node.js, TypeScript, Express. Zod validates requests.
-  Vitest and Supertest for tests.
+- web: React + Vite. The Compose web build publishes static assets to a
+  shared volume that Caddy serves.
+- api: Node.js, TypeScript, Express. Zod validates requests; the API
+  parses ingredient text against normalized Ingredient names in Neo4j.
+  Vitest and Supertest cover parser, API, and UI behavior.
 - neo4j: Neo4j Community in Docker with explicit memory limits.
 - caddy: serves the frontend and reverse proxies /api to the API.
   Handles HTTPS in the demo.
 
 ## Environments
-- Local: `docker compose up` starts Neo4j and imports prepared CSV files.
-  Data acquisition and preparation are run separately; later releases add
-  the API and frontend to the Compose stack.
+- Local: `docker compose up --build` starts Neo4j, imports prepared CSV
+  files, starts the API after import, and serves the web app at
+  `http://localhost:8080` by default. Data acquisition and preparation
+  are run separately. Neo4j's Bolt port and the web port bind to loopback;
+  the API is reachable only through Caddy on the private Compose network.
+- Current behavior: users can parse text and edit included, excluded,
+  and unrecognized ingredient chips. Recipe result retrieval and refresh
+  are not implemented in this slice.
 - Demo (AWS): created with Terraform, destroyed afterwards.
   - Persistent stack: S3 bucket for CSVs, OIDC role, budget alert.
   - Demo stack: EC2, security group, Elastic IP, IAM instance profile.

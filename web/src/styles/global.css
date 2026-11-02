@@ -1,0 +1,89 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #202820;
+  background: #f5f7f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+input {
+  min-height: 2.75rem;
+}
+
+button {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.65rem 1rem;
+  color: white;
+  background: #285d43;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 3px solid #d27b37;
+  outline-offset: 2px;
+}
+
+.page {
+  width: min(100% - 2rem, 52rem);
+  margin: 0 auto;
+  padding: 3rem 0;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin: 0.2rem 0 0.5rem;
+  font-size: clamp(2rem, 6vw, 3rem);
+}
+
+.page-header p {
+  color: #526055;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #285d43 !important;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+footer {
+  margin-top: 2rem;
+  border-top: 1px solid #d8dfd5;
+  padding-top: 1rem;
+  color: #526055;
+  font-size: 0.9rem;
+}
+
+footer a {
+  color: #285d43;
+}

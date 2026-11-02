@@ -1,0 +1,144 @@
+.search-form,
+.add-ingredient {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.search-form {
+  padding: 1.25rem;
+  border: 1px solid #d8dfd5;
+  border-radius: 0.75rem;
+  background: white;
+}
+
+.search-form label,
+.add-ingredient label {
+  font-weight: 700;
+}
+
+.search-form textarea {
+  width: 100%;
+  border: 1px solid #aeb8ac;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  color: inherit;
+  background: white;
+  resize: vertical;
+}
+
+.search-form button {
+  justify-self: start;
+}
+
+.criteria {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.ingredient-group {
+  padding: 1rem;
+  border: 1px solid #d8dfd5;
+  border-radius: 0.75rem;
+  background: white;
+}
+
+.ingredient-group h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.empty-group {
+  margin-bottom: 0;
+  color: #68746a;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #c5d5c7;
+  border-radius: 999px;
+  padding: 0.25rem 0.3rem 0.25rem 0.8rem;
+  background: #edf4ed;
+}
+
+.chip button {
+  min-height: 2rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  color: #244b34;
+  background: #dce9dd;
+  font-size: 0.85rem;
+}
+
+.add-ingredient {
+  margin-top: 1.5rem;
+}
+
+.ingredient-autocomplete {
+  position: relative;
+}
+
+.ingredient-autocomplete input {
+  width: 100%;
+  border: 1px solid #aeb8ac;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  color: inherit;
+  background: white;
+}
+
+.ingredient-suggestions {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  left: 0;
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid #c5d0c3;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: white;
+  box-shadow: 0 0.5rem 1rem rgb(24 42 29 / 14%);
+}
+
+.suggestion {
+  padding: 0.65rem 0.8rem;
+  cursor: pointer;
+}
+
+.suggestion:hover,
+.suggestion.active {
+  background: #edf4ed;
+}
+
+.search-note {
+  margin-top: 2rem;
+  color: #526055;
+}
+
+.error-message {
+  padding: 0.75rem 1rem;
+  border-left: 4px solid #a12c27;
+  color: #76221e;
+  background: #fff0ef;
+}
+
+@media (max-width: 520px) {
+  .ingredient-suggestions {
+    max-height: 12rem;
+  }
+}
