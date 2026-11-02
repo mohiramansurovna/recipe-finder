@@ -28,6 +28,10 @@ async function makePreparedDirectory(): Promise<string> {
       join(dataDirectory, "recipe_ingredients.csv"),
       "recipeId,ingredientName\n1,salt\n",
     ),
+    writeFile(
+      join(dataDirectory, "ingredient_aliases.csv"),
+      "alias,canonicalName\nsea salt,salt\n",
+    ),
   ]);
   return dataDirectory;
 }
@@ -53,6 +57,7 @@ describe("prepared data validation", () => {
       recipes: 1,
       ingredients: 1,
       uses: 1,
+      aliases: 1,
     });
   });
 
@@ -75,6 +80,40 @@ describe("prepared data validation", () => {
     );
     await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
       "duplicate recipe id",
+    );
+  });
+
+  it("rejects aliases that reference unknown canonical ingredients", async () => {
+    const dataDirectory = await makePreparedDirectory();
+    await writeFile(
+      join(dataDirectory, "ingredient_aliases.csv"),
+      "alias,canonicalName\nsea salt,pepper\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "unknown canonical ingredient",
+    );
+  });
+
+  it("rejects duplicate aliases and alias chains", async () => {
+    const dataDirectory = await makePreparedDirectory();
+    await writeFile(
+      join(dataDirectory, "ingredient_aliases.csv"),
+      "alias,canonicalName\nsea salt,salt\nsea salt,salt\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "duplicate alias",
+    );
+
+    await writeFile(
+      join(dataDirectory, "ingredients.csv"),
+      "name,isStaple\nsalt,true\npepper,false\n",
+    );
+    await writeFile(
+      join(dataDirectory, "ingredient_aliases.csv"),
+      "alias,canonicalName\nsea salt,salt\nsalt,pepper\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "canonical ingredient as an alias",
     );
   });
 });

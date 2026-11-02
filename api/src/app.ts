@@ -91,8 +91,11 @@ export function createApiApp(
     }
 
     try {
-      const vocabulary = await ingredientRepository.getIngredientNames();
-      response.json(parseIngredientText(parsedRequest.data.text, vocabulary));
+      const [vocabulary, aliases] = await Promise.all([
+        ingredientRepository.getIngredientNames(),
+        ingredientRepository.getIngredientAliases(),
+      ]);
+      response.json(parseIngredientText(parsedRequest.data.text, vocabulary, aliases));
     } catch (error) {
       next(
         new ApiError(

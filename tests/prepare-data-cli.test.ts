@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -16,6 +16,7 @@ describe("prepareDataset", () => {
       const recipes = await readFile(join(outputPath, "recipes.csv"), "utf8");
       const ingredients = await readFile(join(outputPath, "ingredients.csv"), "utf8");
       const uses = await readFile(join(outputPath, "recipe_ingredients.csv"), "utf8");
+      const aliases = await readFile(join(outputPath, "ingredient_aliases.csv"), "utf8");
       const issues = await readFile(join(outputPath, "cooking_time_issues.csv"), "utf8");
       const outliers = await readFile(join(outputPath, "cooking_time_outliers.csv"), "utf8");
       const invalidRecipes = await readFile(join(outputPath, "invalid_recipes.csv"), "utf8");
@@ -28,7 +29,10 @@ describe("prepareDataset", () => {
       expect(ingredients).toContain("salt,true");
       expect(ingredients).toContain("pepper,false");
       expect(uses).toContain("2,green onion\n");
-      expect(uses).toContain("2,scallion\n");
+      expect(uses.match(/2,green onion\n/gu)).toHaveLength(1);
+      expect(aliases).toBe(
+        "alias,canonicalName\nscallion,green onion\nscallions,green onion\n",
+      );
       expect(issues).toBe("recipeId,sourceValue,reason\n2,,missing\n");
       expect(outliers).toBe("recipeId,minutes\n3,133\n");
       expect(invalidRecipes).toBe("recipeId,sourceRecord,reason\n4,4,missing_name\n");
@@ -39,13 +43,41 @@ describe("prepareDataset", () => {
         sourceRecords: 4,
         recipes: 3,
         excludedRecipes: 1,
-        ingredients: 6,
-        uses: 6,
+        ingredients: 5,
+        uses: 5,
         missingCookingTimes: 1,
         invalidCookingTimes: 0,
         cookingTimeOutliers: 1,
         outlierThresholdMinutes: 132.5,
       });
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes curated alias names and rejects conflicting mappings", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "recipe-graph-aliases-"));
+    try {
+      const outputPath = join(temporaryDirectory, "prepared");
+      const aliasPath = join(temporaryDirectory, "aliases.csv");
+      await writeFile(aliasPath, "alias,canonicalName\n Scallion , Green Onion \n");
+
+      await prepareDataset(fixturePath.pathname, outputPath, aliasPath);
+      await expect(
+        readFile(join(outputPath, "ingredient_aliases.csv"), "utf8"),
+      ).resolves.toBe("alias,canonicalName\nscallion,green onion\n");
+
+      await writeFile(
+        aliasPath,
+        "alias,canonicalName\nscallion,green onion\nscallion,pepper\n",
+      );
+      await expect(
+        prepareDataset(
+          fixturePath.pathname,
+          join(temporaryDirectory, "conflicting"),
+          aliasPath,
+        ),
+      ).rejects.toThrow("conflicting canonical names");
     } finally {
       await rm(temporaryDirectory, { recursive: true, force: true });
     }

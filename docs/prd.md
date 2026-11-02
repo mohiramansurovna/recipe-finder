@@ -45,9 +45,9 @@ This is a greenfield project. Each item below is one OpenSpec change, built stri
 - 003 ingredient-parsing-and-chips (R1)
 - 004 recipe-search-and-results (R1)
 - 005 aliases-and-typo-tolerance (R2)
-- 006 ranking-quality (R2)
-- 007 demo-deployment (R3)
-- 008 categories-and-filters (R4)
+- 006 categories-and-filters (R4)
+- 007 ui-design-implementation (R2)
+- 008 demo-deployment (R3)
 - 009 substitutions (R4)
 - 010 personalization (R5)
 

@@ -13,16 +13,22 @@ import { fileURLToPath } from "node:url";
 import { parse } from "csv-parse";
 
 import { COOKING_TIME_OUTLIER_THRESHOLD_MINUTES } from "./cooking-time.js";
-import { prepareRecipeRow, type RawRecipeRow } from "./prepare-data.js";
+import {
+  normalizeIngredientName,
+  prepareRecipeRow,
+  type RawRecipeRow,
+} from "./prepare-data.js";
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_INPUT = join(PROJECT_ROOT, "data", "raw", "RAW_recipes.csv");
 const DEFAULT_OUTPUT = join(PROJECT_ROOT, "data", "prepared");
+const DEFAULT_ALIAS_SOURCE = join(PROJECT_ROOT, "data", "ingredient-aliases.csv");
 const REQUIRED_COLUMNS = ["name", "id", "minutes", "tags", "ingredients"];
 const OUTPUT_FILES = [
   "recipes.csv",
   "ingredients.csv",
   "recipe_ingredients.csv",
+  "ingredient_aliases.csv",
   "cooking_time_issues.csv",
   "cooking_time_outliers.csv",
   "invalid_recipes.csv",
@@ -65,17 +71,71 @@ function assertRequiredColumns(headers: string[]): string[] {
   return headers;
 }
 
+async function loadIngredientAliases(sourcePath: string): Promise<Map<string, string>> {
+  let headersValidated = false;
+  const aliases = new Map<string, string>();
+  const parser = parse({
+    bom: true,
+    columns: (headers: string[]) => {
+      const requiredColumns = ["alias", "canonicalName"];
+      const missing = requiredColumns.filter((column) => !headers.includes(column));
+      if (missing.length > 0) {
+        throw new Error(
+          `${sourcePath} is missing required columns: ${missing.join(", ")}.`,
+        );
+      }
+      headersValidated = true;
+      return headers;
+    },
+    skip_empty_lines: true,
+  });
+  const input = createReadStream(sourcePath);
+  input.on("error", (error: Error) => parser.destroy(error));
+  input.pipe(parser);
+
+  for await (const sourceRow of parser) {
+    const row = sourceRow as Record<string, string>;
+    const alias = normalizeIngredientName(row["alias"] ?? "");
+    const canonicalName = normalizeIngredientName(row["canonicalName"] ?? "");
+    if (alias === "" || canonicalName === "") {
+      throw new Error(`${sourcePath} contains an empty ingredient alias or canonical name.`);
+    }
+    if (alias === canonicalName) {
+      throw new Error(`${sourcePath} contains a self-alias for ${alias}.`);
+    }
+    const existingTarget = aliases.get(alias);
+    if (existingTarget !== undefined && existingTarget !== canonicalName) {
+      throw new Error(`${sourcePath} maps alias ${alias} to conflicting canonical names.`);
+    }
+    aliases.set(alias, canonicalName);
+  }
+  if (!headersValidated) throw new Error(`${sourcePath} is empty or missing its header row.`);
+
+  for (const [alias, canonicalName] of aliases) {
+    if (aliases.has(canonicalName)) {
+      throw new Error(
+        `${sourcePath} contains an alias chain or cycle through ${alias} and ${canonicalName}.`,
+      );
+    }
+  }
+  return aliases;
+}
+
 export async function prepareDataset(
   inputPath: string = DEFAULT_INPUT,
   outputPath: string = DEFAULT_OUTPUT,
+  aliasSourcePath: string = DEFAULT_ALIAS_SOURCE,
 ): Promise<PreparationSummary> {
   const input = resolve(inputPath);
   const output = resolve(outputPath);
+  const aliasSource = resolve(aliasSourcePath);
+  const aliases = await loadIngredientAliases(aliasSource);
   const temporaryDirectory = await mkdtemp(join(dirname(output), ".recipe-prep-"));
   const outputStreams = {
     recipes: createWriteStream(join(temporaryDirectory, "recipes.csv")),
     ingredients: createWriteStream(join(temporaryDirectory, "ingredients.csv")),
     uses: createWriteStream(join(temporaryDirectory, "recipe_ingredients.csv")),
+    aliases: createWriteStream(join(temporaryDirectory, "ingredient_aliases.csv")),
     issues: createWriteStream(join(temporaryDirectory, "cooking_time_issues.csv")),
     outliers: createWriteStream(join(temporaryDirectory, "cooking_time_outliers.csv")),
     invalidRecipes: createWriteStream(join(temporaryDirectory, "invalid_recipes.csv")),
@@ -106,6 +166,7 @@ export async function prepareDataset(
       writeCsvRow(outputStreams.recipes, ["id", "name", "minutes"]),
       writeCsvRow(outputStreams.ingredients, ["name", "isStaple"]),
       writeCsvRow(outputStreams.uses, ["recipeId", "ingredientName"]),
+      writeCsvRow(outputStreams.aliases, ["alias", "canonicalName"]),
       writeCsvRow(outputStreams.issues, ["recipeId", "sourceValue", "reason"]),
       writeCsvRow(outputStreams.outliers, ["recipeId", "minutes"]),
       writeCsvRow(outputStreams.invalidRecipes, ["recipeId", "sourceRecord", "reason"]),
@@ -165,14 +226,19 @@ export async function prepareDataset(
       ]);
 
       for (const ingredient of prepared.ingredients) {
+        const canonicalName = aliases.get(ingredient.name) ?? ingredient.name;
         ingredientStaples.set(
-          ingredient.name,
-          ingredientStaples.get(ingredient.name) === true || ingredient.isStaple,
+          canonicalName,
+          ingredientStaples.get(canonicalName) === true || ingredient.isStaple,
         );
       }
+      const recipeIngredientNames = new Set<string>();
       for (const use of prepared.uses) {
+        const canonicalName = aliases.get(use.ingredientName) ?? use.ingredientName;
+        if (recipeIngredientNames.has(canonicalName)) continue;
+        recipeIngredientNames.add(canonicalName);
         summary.uses += 1;
-        await writeCsvRow(outputStreams.uses, [use.recipeId, use.ingredientName]);
+        await writeCsvRow(outputStreams.uses, [use.recipeId, canonicalName]);
       }
       if (prepared.cookingTimeIssue !== null) {
         if (prepared.cookingTimeIssue.reason === "missing") {
@@ -201,6 +267,16 @@ export async function prepareDataset(
       a < b ? -1 : a > b ? 1 : 0,
     )) {
       await writeCsvRow(outputStreams.ingredients, [name, isStaple]);
+    }
+    for (const [alias, canonicalName] of [...aliases.entries()].sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    )) {
+      if (!ingredientStaples.has(canonicalName)) {
+        throw new Error(
+          `${alias} maps to ${canonicalName}, which is not present in the prepared ingredients.`,
+        );
+      }
+      await writeCsvRow(outputStreams.aliases, [alias, canonicalName]);
     }
     summary.ingredients = ingredientStaples.size;
     if (!headersValidated) throw new Error("RAW_recipes.csv is empty or missing its header row.");

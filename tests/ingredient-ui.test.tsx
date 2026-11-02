@@ -53,6 +53,61 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
 }
 
 describe("ingredient criteria interface", () => {
+  it("shows canonical alias and typo matches and searches with excluded criteria", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({ ingredients: ["butter", "chicken", "green onion"] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          included: ["green onion", "chicken"],
+          excluded: ["butter"],
+          unrecognized: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          recipes: [
+            {
+              id: "canonical-match",
+              name: "Scallion chicken",
+              minutes: 20,
+              matchedIngredients: ["green onion", "chicken"],
+              missingIngredients: [],
+              excludedIngredients: ["butter"],
+            },
+          ],
+          nextCursor: null,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    const input = screen.getByRole("textbox", { name: "Ingredients you have" });
+    await user.type(input, "scallion, chiken, I don't have butter");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+
+    const included = await screen.findByRole("region", { name: "Included" });
+    expect(included).toHaveTextContent("green onion");
+    expect(included).toHaveTextContent("chicken");
+    expect(included).not.toHaveTextContent("scallion");
+    expect(screen.getByRole("region", { name: "Excluded" })).toHaveTextContent("butter");
+    expect(await screen.findByRole("heading", { name: "Scallion chicken" })).toBeVisible();
+    expect(
+      fetchMock.mock.calls.find(([url]) => url === "/api/recipes/search")?.[1]?.body,
+    ).toBe(
+      JSON.stringify({
+        included: ["green onion", "chicken"],
+        excluded: ["butter"],
+        maxMinutes: null,
+        cursor: null,
+      }),
+    );
+  });
+
   it("parses text, shows all categories, and credits the dataset without contributor details", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

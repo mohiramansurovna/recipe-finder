@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import neo4j from "neo4j-driver";
 import { describe, expect, it } from "vitest";
 
+import { Neo4jIngredientRepository } from "../api/src/features/ingredients/neo4j-ingredient-repository.js";
 import { importPreparedData } from "../scripts/import-data.js";
 
 const preparedFixtureDirectory = join(
@@ -35,7 +36,7 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
     try {
       await expect(
         importPreparedData(preparedFixtureDirectory, testConfig),
-      ).resolves.toEqual({ recipes: 2, ingredients: 2, uses: 2 });
+      ).resolves.toEqual({ recipes: 2, ingredients: 2, uses: 2, aliases: 1 });
 
       const session = driver.session({ database: testConfig.database });
       try {
@@ -66,10 +67,34 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
           uses: integer("useCount"),
         }).toEqual({
           recipes: 2,
-          ingredients: 2,
+          ingredients: 3,
           recipesWithoutMinutes: 1,
           uses: 2,
         });
+        const aliases = await session.run(
+          "MATCH (alias:Ingredient {name: 'peppercorn'})-[:ALIAS_OF]->(canonical:Ingredient) RETURN canonical.name AS name",
+        );
+        expect(aliases.records.map((record) => record.get("name"))).toEqual(["pepper"]);
+        await session.run(
+          `MATCH (alias:Ingredient {name: 'peppercorn'})
+           MATCH (canonical:Ingredient {name: 'pepper'})
+           MERGE (alias)-[:ALIAS_OF]->(canonical)`,
+        );
+        const relationshipCount = await session.run(
+          "MATCH (:Ingredient {name: 'peppercorn'})-[alias:ALIAS_OF]->(:Ingredient {name: 'pepper'}) RETURN count(alias) AS count",
+        );
+        expect(relationshipCount.records[0]?.get("count")).toEqual(neo4j.int(1));
+        const ingredientRepository = new Neo4jIngredientRepository(
+          driver,
+          testConfig.database,
+        );
+        await expect(ingredientRepository.getIngredientNames()).resolves.toEqual([
+          "pepper",
+          "salt",
+        ]);
+        await expect(ingredientRepository.getIngredientAliases()).resolves.toEqual([
+          { alias: "peppercorn", canonicalName: "pepper" },
+        ]);
       } finally {
         await session.close();
       }

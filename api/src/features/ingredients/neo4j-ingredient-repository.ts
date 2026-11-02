@@ -1,6 +1,9 @@
 import type neo4j from "neo4j-driver";
 
-import type { IngredientRepository } from "./ingredient-repository.js";
+import type {
+  IngredientAlias,
+  IngredientRepository,
+} from "./ingredient-repository.js";
 
 export class Neo4jIngredientRepository implements IngredientRepository {
   constructor(
@@ -12,7 +15,12 @@ export class Neo4jIngredientRepository implements IngredientRepository {
     const session = this.driver.session({ database: this.database });
     try {
       const result = await session.run(
-        "MATCH (ingredient:Ingredient) RETURN ingredient.name AS name ORDER BY name",
+        `MATCH (ingredient:Ingredient)
+         WHERE NOT EXISTS {
+           MATCH (ingredient)-[:ALIAS_OF]->()
+         }
+         RETURN ingredient.name AS name
+         ORDER BY name`,
       );
       return result.records.map((record) => {
         const name: unknown = record.get("name");
@@ -20,6 +28,27 @@ export class Neo4jIngredientRepository implements IngredientRepository {
           throw new Error("Neo4j returned an ingredient without a valid name.");
         }
         return name;
+      });
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getIngredientAliases(): Promise<readonly IngredientAlias[]> {
+    const session = this.driver.session({ database: this.database });
+    try {
+      const result = await session.run(
+        `MATCH (alias:Ingredient)-[:ALIAS_OF]->(canonical:Ingredient)
+         RETURN alias.name AS alias, canonical.name AS canonicalName
+         ORDER BY alias`,
+      );
+      return result.records.map((record) => {
+        const alias: unknown = record.get("alias");
+        const canonicalName: unknown = record.get("canonicalName");
+        if (typeof alias !== "string" || typeof canonicalName !== "string") {
+          throw new Error("Neo4j returned an ingredient alias without valid names.");
+        }
+        return { alias, canonicalName };
       });
     } finally {
       await session.close();

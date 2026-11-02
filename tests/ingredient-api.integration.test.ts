@@ -4,7 +4,10 @@ import request from "supertest";
 import {
   createApiApp,
 } from "../api/src/app.js";
-import type { IngredientRepository } from "../api/src/features/ingredients/ingredient-repository.js";
+import type {
+  IngredientAlias,
+  IngredientRepository,
+} from "../api/src/features/ingredients/ingredient-repository.js";
 
 const invalidRequests: { description: string; body: Record<string, unknown> | undefined }[] = [
   { body: undefined, description: "missing text" },
@@ -17,22 +20,34 @@ class TestIngredientRepository implements IngredientRepository {
   constructor(
     private readonly names: readonly string[],
     private readonly failure?: Error,
+    private readonly aliases: readonly IngredientAlias[] = [],
   ) {}
 
   async getIngredientNames() {
     if (this.failure) throw this.failure;
     return this.names;
   }
+
+  async getIngredientAliases() {
+    if (this.failure) throw this.failure;
+    return this.aliases;
+  }
 }
 
 describe("ingredient API", () => {
   it("returns vocabulary from the test graph", async () => {
-    const app = createApiApp(new TestIngredientRepository(["butter", "chicken"]));
+    const app = createApiApp(
+      new TestIngredientRepository(
+        ["green onion"],
+        undefined,
+        [{ alias: "scallion", canonicalName: "green onion" }],
+      ),
+    );
 
     await request(app)
       .get("/api/ingredients")
       .expect(200)
-      .expect({ ingredients: ["butter", "chicken"] });
+      .expect({ ingredients: ["green onion"] });
   });
 
   it("parses a request against the test graph vocabulary", async () => {
@@ -46,6 +61,26 @@ describe("ingredient API", () => {
         included: ["chicken", "rice"],
         excluded: ["butter"],
         unrecognized: [],
+      });
+  });
+
+  it("resolves aliases and typos while preserving natural-language exclusions", async () => {
+    const app = createApiApp(
+      new TestIngredientRepository(
+        ["butter", "chicken", "green onion"],
+        undefined,
+        [{ alias: "scallion", canonicalName: "green onion" }],
+      ),
+    );
+
+    await request(app)
+      .post("/api/ingredients/parse")
+      .send({ text: "I don't have scallion and chiken, dragonfruit" })
+      .expect(200)
+      .expect({
+        included: ["chicken"],
+        excluded: ["green onion"],
+        unrecognized: ["dragonfruit"],
       });
   });
 

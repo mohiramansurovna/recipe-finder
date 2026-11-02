@@ -13,6 +13,7 @@ export interface PreparedDataCounts {
   recipes: number;
   ingredients: number;
   uses: number;
+  aliases: number;
 }
 
 export interface ImportConfig {
@@ -86,7 +87,8 @@ export async function validatePreparedData(
   const dataDirectory = resolve(directory);
   const recipeIds = new Set<string>();
   const ingredientNames = new Set<string>();
-  const counts: PreparedDataCounts = { recipes: 0, ingredients: 0, uses: 0 };
+  const aliasNames = new Set<string>();
+  const counts: PreparedDataCounts = { recipes: 0, ingredients: 0, uses: 0, aliases: 0 };
 
   for await (const row of readCsvRows(join(dataDirectory, "recipes.csv"), [
     "id",
@@ -140,6 +142,36 @@ export async function validatePreparedData(
     }
   }
 
+  for await (const row of readCsvRows(
+    join(dataDirectory, "ingredient_aliases.csv"),
+    ["alias", "canonicalName"],
+  )) {
+    counts.aliases += 1;
+    const alias = row["alias"];
+    const canonicalName = row["canonicalName"];
+    if (!isNonEmpty(alias) || !isNonEmpty(canonicalName)) {
+      throw new Error(
+        `ingredient_aliases.csv row ${counts.aliases + 1} has an empty alias or canonical name.`,
+      );
+    }
+    if (alias === canonicalName) {
+      throw new Error(`ingredient_aliases.csv contains a self-alias for ${alias}.`);
+    }
+    if (aliasNames.has(alias)) {
+      throw new Error(`ingredient_aliases.csv contains duplicate alias ${alias}.`);
+    }
+    if (!ingredientNames.has(canonicalName)) {
+      throw new Error(
+        `ingredient_aliases.csv row ${counts.aliases + 1} references an unknown canonical ingredient.`,
+      );
+    }
+    if (ingredientNames.has(alias)) {
+      throw new Error(
+        `ingredient_aliases.csv row ${counts.aliases + 1} uses a canonical ingredient as an alias.`,
+      );
+    }
+    aliasNames.add(alias);
+  }
   if (counts.recipes === 0 || counts.ingredients === 0) {
     throw new Error("Prepared data must contain at least one recipe and one ingredient.");
   }
@@ -226,6 +258,27 @@ async function* useRows(directory: string): AsyncGenerator<{
   }
 }
 
+async function* aliasRows(directory: string): AsyncGenerator<{
+  alias: string;
+  canonicalName: string;
+}> {
+  for await (const row of readCsvRows(
+    join(directory, "ingredient_aliases.csv"),
+    ["alias", "canonicalName"],
+  )) {
+    yield {
+      alias: row["alias"] ?? "",
+      canonicalName: row["canonicalName"] ?? "",
+    };
+  }
+}
+
+async function* aliasNodeRows(directory: string): AsyncGenerator<{ alias: string }> {
+  for await (const row of aliasRows(directory)) {
+    yield { alias: row.alias };
+  }
+}
+
 async function writeRecipeBatch(session: Session, rows: {
   id: string;
   name: string;
@@ -266,6 +319,31 @@ async function writeUseBatch(
   );
 }
 
+async function writeAliasNodeBatch(
+  session: Session,
+  rows: { alias: string }[],
+): Promise<void> {
+  await session.run(
+    `UNWIND $rows AS row
+     MERGE (alias:Ingredient {name: row.alias})
+     SET alias.isStaple = false`,
+    { rows },
+  );
+}
+
+async function writeAliasRelationshipBatch(
+  session: Session,
+  rows: { alias: string; canonicalName: string }[],
+): Promise<void> {
+  await session.run(
+    `UNWIND $rows AS row
+     MATCH (alias:Ingredient {name: row.alias})
+     MATCH (canonical:Ingredient {name: row.canonicalName})
+     MERGE (alias)-[:ALIAS_OF]->(canonical)`,
+    { rows },
+  );
+}
+
 export async function importPreparedData(
   directory: string,
   config: ImportConfig,
@@ -295,7 +373,13 @@ export async function importPreparedData(
     await runBatched(ingredientRows(dataDirectory), (batch) =>
       writeIngredientBatch(session, batch),
     );
+    await runBatched(aliasNodeRows(dataDirectory), (batch) =>
+      writeAliasNodeBatch(session, batch),
+    );
     await runBatched(useRows(dataDirectory), (batch) => writeUseBatch(session, batch));
+    await runBatched(aliasRows(dataDirectory), (batch) =>
+      writeAliasRelationshipBatch(session, batch),
+    );
   } finally {
     await Promise.all([session.close(), activeDriver.close()]);
   }
@@ -330,7 +414,7 @@ async function main(args: string[]): Promise<void> {
   }
   const counts = await importPreparedData(dataDirectory, readConfig());
   console.log(
-    `Imported ${counts.recipes} recipes, ${counts.ingredients} ingredients, and ${counts.uses} USES relationships.`,
+    `Imported ${counts.recipes} recipes, ${counts.ingredients} ingredients, ${counts.uses} USES relationships, and ${counts.aliases} aliases.`,
   );
 }
 

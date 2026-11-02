@@ -14,6 +14,10 @@ class TestIngredientRepository implements IngredientRepository {
   async getIngredientNames() {
     return ["butter", "chicken"];
   }
+
+  async getIngredientAliases() {
+    return [];
+  }
 }
 
 class TestRecipeSearchRepository implements RecipeSearchRepository {

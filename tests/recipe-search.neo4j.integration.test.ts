@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import neo4j from "neo4j-driver";
 import type { Driver } from "neo4j-driver";
+import request from "supertest";
 import { describe, expect, it } from "vitest";
 
+import { createApiApp } from "../api/src/app.js";
+import { Neo4jIngredientRepository } from "../api/src/features/ingredients/neo4j-ingredient-repository.js";
 import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/neo4j-recipe-search-repository.js";
 
 const testConfig =
@@ -38,6 +41,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         { id: `${prefix}-rank-03`, name: "Fewer matches", minutes: 15 },
         { id: `${prefix}-rank-04`, name: "One missing", minutes: 15 },
         { id: `${prefix}-rank-05`, name: "Unknown time", minutes: null },
+        { id: `${prefix}-alias-search`, name: "Canonical alias match", minutes: 18 },
         ...Array.from({ length: 25 }, (_, index) => ({
           id: `${prefix}-page-${String(index).padStart(3, "0")}`,
           name: `Page recipe ${index}`,
@@ -49,6 +53,8 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         "rice",
         "butter",
         "tomato",
+        "green onion",
+        "scallion",
         ...Array.from({ length: 25 }, (_, index) => `page ingredient ${index}`),
       ].map((name) => `${prefix}-${name}`);
       const seedUses = [
@@ -63,6 +69,9 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         { id: `${prefix}-rank-04`, ingredient: "tomato" },
         { id: `${prefix}-rank-04`, ingredient: "butter" },
         { id: `${prefix}-rank-05`, ingredient: "chicken" },
+        { id: `${prefix}-alias-search`, ingredient: "chicken" },
+        { id: `${prefix}-alias-search`, ingredient: "green onion" },
+        { id: `${prefix}-alias-search`, ingredient: "butter" },
         ...Array.from({ length: 25 }, (_, index) => ({
           id: `${prefix}-page-${String(index).padStart(3, "0")}`,
           ingredient: `page ingredient ${index}`,
@@ -98,11 +107,53 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
            CREATE (recipe)-[:USES]->(ingredient)`,
           { uses: seedUses },
         );
+        await seedSession.run(
+          `MATCH (alias:Ingredient {name: $alias})
+           MATCH (canonical:Ingredient {name: $canonical})
+           MERGE (alias)-[:ALIAS_OF]->(canonical)`,
+          {
+            alias: `${prefix}-scallion`,
+            canonical: `${prefix}-green onion`,
+          },
+        );
       } finally {
         await seedSession.close();
       }
 
       const repository = new Neo4jRecipeSearchRepository(driver, database);
+      const app = createApiApp(
+        new Neo4jIngredientRepository(driver, database),
+        100,
+        repository,
+      );
+      const parsedCriteria = {
+        included: [`${prefix}-green onion`, `${prefix}-chicken`],
+        excluded: [`${prefix}-butter`],
+      };
+      await request(app)
+        .post("/api/ingredients/parse")
+        .send({
+          text: `${prefix}-scallion, ${prefix}-chickan, I don't have ${prefix}-butter`,
+        })
+        .expect(200)
+        .expect({
+          ...parsedCriteria,
+          unrecognized: [],
+        });
+      await request(app)
+        .post("/api/recipes/search")
+        .send({ ...parsedCriteria, maxMinutes: null, cursor: null })
+        .expect(200)
+        .expect((response) => {
+          expect(response.body.recipes).toContainEqual(
+            expect.objectContaining({
+              id: `${prefix}-alias-search`,
+              matchedIngredients: parsedCriteria.included,
+              excludedIngredients: parsedCriteria.excluded,
+            }),
+          );
+        });
+
       const anyTimePage = await repository.search({
         included: [`${prefix}-chicken`, `${prefix}-rice`],
         excluded: [`${prefix}-butter`],
@@ -167,6 +218,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
             `${prefix}-rank-05`,
             `${prefix}-rank-01`,
             `${prefix}-rank-03`,
+            `${prefix}-alias-search`,
             `${prefix}-rank-02`,
             `${prefix}-rank-04`,
           ),

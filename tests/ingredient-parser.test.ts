@@ -11,6 +11,7 @@ const vocabulary = [
   "rice",
   "spinach",
 ];
+const aliases = [{ alias: "scallion", canonicalName: "green onion" }];
 
 describe("parseIngredientText", () => {
   it("parses included and specifically excluded ingredients from natural text", () => {
@@ -67,6 +68,75 @@ describe("parseIngredientText", () => {
       included: [],
       excluded: ["butter"],
       unrecognized: [],
+    });
+  });
+
+  it.each([
+    ["I don't have butter", "butter"],
+    ["I don’t have any butter", "butter"],
+    ["I do not have butter", "butter"],
+  ])("understands possession negation in %s", (text, ingredient) => {
+    expect(parseIngredientText(text, vocabulary)).toEqual({
+      included: [],
+      excluded: [ingredient],
+      unrecognized: [],
+    });
+  });
+
+  it("keeps an unknown possession-negated ingredient unrecognized", () => {
+    expect(parseIngredientText("I don't have dragonfruit", vocabulary)).toEqual({
+      included: [],
+      excluded: [],
+      unrecognized: ["dragonfruit"],
+    });
+  });
+
+  it("resolves aliases to canonical names and deduplicates canonical phrases", () => {
+    expect(
+      parseIngredientText("scallion and green onion", vocabulary, aliases),
+    ).toEqual({
+      included: ["green onion"],
+      excluded: [],
+      unrecognized: [],
+    });
+    expect(parseIngredientText("no scallion", vocabulary, aliases)).toEqual({
+      included: [],
+      excluded: ["green onion"],
+      unrecognized: [],
+    });
+  });
+
+  it.each([
+    ["chiken", "chicken"],
+    ["butterr", "butter"],
+    ["chickan", "chicken"],
+    ["chikcen", "chicken"],
+  ])("recognizes one-edit typo %s", (typo, canonicalName) => {
+    expect(parseIngredientText(typo, vocabulary)).toEqual({
+      included: [canonicalName],
+      excluded: [],
+      unrecognized: [],
+    });
+  });
+
+  it("recognizes a typo inside a multi-word ingredient and in a negation", () => {
+    expect(parseIngredientText("green onoin, no buttr", vocabulary)).toEqual({
+      included: ["green onion"],
+      excluded: ["butter"],
+      unrecognized: [],
+    });
+  });
+
+  it("leaves short and equally close typo candidates unrecognized", () => {
+    expect(parseIngredientText("btr", ["butter"])).toEqual({
+      included: [],
+      excluded: [],
+      unrecognized: ["btr"],
+    });
+    expect(parseIngredientText("batter", ["butter", "better"])).toEqual({
+      included: [],
+      excluded: [],
+      unrecognized: ["batter"],
     });
   });
 });
