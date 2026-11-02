@@ -19,6 +19,11 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+const filterOptions = {
+  categories: ["dairy", "fish/seafood", "meat", "nuts"],
+  cuisines: ["Italian", "Mexican"],
+};
+
 class ImmediateIntersectionObserver implements IntersectionObserver {
   readonly root: Element | Document | null = null;
   readonly rootMargin = "0px";
@@ -59,10 +64,12 @@ describe("ingredient criteria interface", () => {
       .mockResolvedValueOnce(
         jsonResponse({ ingredients: ["butter", "chicken", "green onion"] }),
       )
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
         jsonResponse({
           included: ["green onion", "chicken"],
           excluded: ["butter"],
+          excludedCategories: [],
           unrecognized: [],
         }),
       )
@@ -102,6 +109,8 @@ describe("ingredient criteria interface", () => {
       JSON.stringify({
         included: ["green onion", "chicken"],
         excluded: ["butter"],
+        excludedCategories: [],
+        cuisines: [],
         maxMinutes: null,
         cursor: null,
       }),
@@ -112,10 +121,12 @@ describe("ingredient criteria interface", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ ingredients: ["butter", "chicken", "spinach"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
         jsonResponse({
           included: ["chicken"],
           excluded: ["butter"],
+          excludedCategories: [],
           unrecognized: ["dragonfruit"],
         }),
       )
@@ -178,6 +189,8 @@ describe("ingredient criteria interface", () => {
         body: JSON.stringify({
           included: ["chicken"],
           excluded: ["butter"],
+          excludedCategories: [],
+          cuisines: [],
           maxMinutes: 30,
           cursor: null,
         }),
@@ -189,8 +202,14 @@ describe("ingredient criteria interface", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ ingredients: ["chicken"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
-        jsonResponse({ included: ["chicken"], excluded: [], unrecognized: [] }),
+        jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({ error: { message: "Search is unavailable." } }, 503),
@@ -229,8 +248,14 @@ describe("ingredient criteria interface", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ ingredients: ["chicken"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
-        jsonResponse({ included: ["chicken"], excluded: [], unrecognized: [] }),
+        jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
       )
       .mockResolvedValueOnce(jsonResponse({ recipes: [], nextCursor: null }));
     vi.stubGlobal("fetch", fetchMock);
@@ -259,8 +284,14 @@ describe("ingredient criteria interface", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ ingredients: ["chicken"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
-        jsonResponse({ included: ["chicken"], excluded: [], unrecognized: [] }),
+        jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({ recipes: [chickenRecipe], nextCursor: "cursor-page-two" }),
@@ -299,6 +330,8 @@ describe("ingredient criteria interface", () => {
     expect(JSON.parse(String(searchCalls[1]?.[1]?.body))).toEqual({
       included: ["chicken"],
       excluded: [],
+      excludedCategories: [],
+      cuisines: [],
       maxMinutes: null,
       cursor: "cursor-page-two",
     });
@@ -310,8 +343,14 @@ describe("ingredient criteria interface", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ ingredients: ["chicken"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
-        jsonResponse({ included: ["chicken"], excluded: [], unrecognized: [] }),
+        jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({
@@ -373,10 +412,12 @@ describe("ingredient criteria interface", () => {
       if (url === "/api/ingredients") {
         return jsonResponse({ ingredients: ["chicken"] });
       }
+      if (url === "/api/filters") return jsonResponse(filterOptions);
       if (url === "/api/ingredients/parse") {
         return jsonResponse({
           included: ["chicken"],
           excluded: [],
+          excludedCategories: [],
           unrecognized: [],
         });
       }
@@ -414,6 +455,8 @@ describe("ingredient criteria interface", () => {
     expect(JSON.parse(String(searchCalls()[1]?.[1]?.body))).toEqual({
       included: [],
       excluded: ["chicken"],
+      excludedCategories: [],
+      cuisines: [],
       maxMinutes: null,
       cursor: null,
     });
@@ -426,6 +469,8 @@ describe("ingredient criteria interface", () => {
     expect(JSON.parse(String(searchCalls()[2]?.[1]?.body))).toEqual({
       included: [],
       excluded: ["chicken"],
+      excludedCategories: [],
+      cuisines: [],
       maxMinutes: 15,
       cursor: null,
     });
@@ -450,14 +495,145 @@ describe("ingredient criteria interface", () => {
     );
   });
 
+  it("uses accessible category chips and the Vegetarian preset to restart searches", async () => {
+    const searchBodies: unknown[] = [];
+    let searchCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/ingredients") {
+        return jsonResponse({ ingredients: ["chicken"] });
+      }
+      if (url === "/api/filters") return jsonResponse(filterOptions);
+      if (url === "/api/ingredients/parse") {
+        return jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        });
+      }
+      searchBodies.push(JSON.parse(String(init?.body)));
+      searchCount += 1;
+      return jsonResponse({
+        recipes: [
+          {
+            id: `category-result-${searchCount}`,
+            name: `Category result ${searchCount}`,
+            minutes: 10,
+            matchedIngredients: ["chicken"],
+            missingIngredients: [],
+            excludedIngredients: [],
+          },
+        ],
+        nextCursor: null,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "chicken");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    expect(await screen.findByRole("heading", { name: "Category result 1" })).toBeVisible();
+
+    const vegetarian = screen.getByRole("button", { name: "Vegetarian" });
+    vegetarian.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("heading", { name: "Category result 2" })).toBeVisible();
+    expect(vegetarian).toHaveAttribute("aria-pressed", "true");
+    expect(searchBodies[1]).toMatchObject({
+      excludedCategories: ["meat", "fish/seafood"],
+      cursor: null,
+    });
+
+    const meatChip = screen.getByRole("button", { name: "meat" });
+    meatChip.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("heading", { name: "Category result 3" })).toBeVisible();
+    expect(vegetarian).toHaveAttribute("aria-pressed", "false");
+    expect(searchBodies[2]).toMatchObject({
+      excludedCategories: ["fish/seafood"],
+      cursor: null,
+    });
+  });
+
+  it("supports multi-cuisine selection, clearing, and criteria-bound pagination", async () => {
+    const searchBodies: unknown[] = [];
+    let searchCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/ingredients") {
+        return jsonResponse({ ingredients: ["chicken"] });
+      }
+      if (url === "/api/filters") return jsonResponse(filterOptions);
+      if (url === "/api/ingredients/parse") {
+        return jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        });
+      }
+
+      searchBodies.push(JSON.parse(String(init?.body)));
+      searchCount += 1;
+      return jsonResponse({
+        recipes: [
+          {
+            id: `cuisine-result-${searchCount}`,
+            name: `Cuisine result ${searchCount}`,
+            minutes: 10,
+            matchedIngredients: ["chicken"],
+            missingIngredients: [],
+            excludedIngredients: [],
+          },
+        ],
+        nextCursor: `cursor-${searchCount}`,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "chicken");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    expect(await screen.findByRole("heading", { name: "Cuisine result 1" })).toBeVisible();
+
+    await user.click(screen.getByRole("checkbox", { name: "Italian" }));
+    expect(await screen.findByRole("heading", { name: "Cuisine result 2" })).toBeVisible();
+    expect(searchBodies[1]).toMatchObject({ cuisines: ["Italian"], cursor: null });
+
+    await user.click(screen.getByRole("checkbox", { name: "Mexican" }));
+    expect(await screen.findByRole("heading", { name: "Cuisine result 3" })).toBeVisible();
+    expect(searchBodies[2]).toMatchObject({
+      cuisines: ["Italian", "Mexican"],
+      cursor: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Load more recipes" }));
+    expect(await screen.findByRole("heading", { name: "Cuisine result 4" })).toBeVisible();
+    expect(searchBodies[3]).toMatchObject({
+      cuisines: ["Italian", "Mexican"],
+      cursor: "cursor-3",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Clear cuisine filters" }));
+    expect(await screen.findByRole("heading", { name: "Cuisine result 5" })).toBeVisible();
+    expect(searchBodies[4]).toMatchObject({ cuisines: [], cursor: null });
+  });
+
   it("supports adding, removing, and toggling criteria with keyboard controls", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(jsonResponse({ ingredients: ["chicken", "spinach"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
       .mockResolvedValueOnce(
         jsonResponse({
           included: ["chicken"],
           excluded: [],
+          excludedCategories: [],
           unrecognized: ["mystery"],
         }),
       );

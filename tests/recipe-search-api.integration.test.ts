@@ -18,6 +18,10 @@ class TestIngredientRepository implements IngredientRepository {
   async getIngredientAliases() {
     return [];
   }
+
+  async getIngredientCategories() {
+    return ["dairy", "fish/seafood", "meat", "nuts"];
+  }
 }
 
 class TestRecipeSearchRepository implements RecipeSearchRepository {
@@ -27,6 +31,10 @@ class TestRecipeSearchRepository implements RecipeSearchRepository {
     private readonly page: RecipeSearchPage = { recipes: [], nextCursor: null },
     private readonly failure?: Error,
   ) {}
+
+  async getCuisineNames() {
+    return ["Italian", "Mexican"];
+  }
 
   async search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage> {
     this.requests.push(criteria);
@@ -38,6 +46,8 @@ class TestRecipeSearchRepository implements RecipeSearchRepository {
 const validRequest = {
   included: ["chicken"],
   excluded: ["butter"],
+  excludedCategories: ["dairy"],
+  cuisines: ["Italian"],
   maxMinutes: 30,
   cursor: null,
 };
@@ -79,13 +89,24 @@ describe("recipe search API", () => {
       .expect(200);
 
     expect(repository.requests).toEqual([
-      { included: [], excluded: [], maxMinutes: null, cursor: null },
+      {
+        included: [],
+        excluded: [],
+        excludedCategories: [],
+        cuisines: [],
+        maxMinutes: null,
+        cursor: null,
+      },
     ]);
   });
 
   it.each([
     { ...validRequest, included: ["", "chicken"] },
     { ...validRequest, included: ["chicken", "chicken"] },
+    { ...validRequest, excludedCategories: ["dairy", "dairy"] },
+    { ...validRequest, excludedCategories: ["vegetarian"] },
+    { ...validRequest, cuisines: ["Italian", "Italian"] },
+    { ...validRequest, cuisines: [""] },
     { ...validRequest, maxMinutes: 20 },
     { ...validRequest, cursor: "x".repeat(4097) },
     { ...validRequest, unexpected: true },
@@ -105,6 +126,24 @@ describe("recipe search API", () => {
       });
   });
 
+  it("rejects a cuisine that is not available in the graph", async () => {
+    const app = createApiApp(
+      new TestIngredientRepository(),
+      100,
+      new TestRecipeSearchRepository(),
+    );
+
+    await request(app)
+      .post("/api/recipes/search")
+      .send({ ...validRequest, cuisines: ["Atlantis"] })
+      .expect(400)
+      .expect({
+        error: {
+          code: "INVALID_REQUEST",
+          message: "Cuisine selections must match available recipe cuisines.",
+        },
+      });
+  });
   it("returns a client error for an invalid or mismatched cursor", async () => {
     const repository = new TestRecipeSearchRepository(
       { recipes: [], nextCursor: null },

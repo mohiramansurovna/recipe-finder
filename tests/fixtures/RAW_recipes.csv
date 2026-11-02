@@ -1,5 +1,5 @@
 name,id,minutes,contributor_id,tags,ingredients
-"Soup, ""simple""",1,15,999,"['soup']","['Salt', 'olive oil', 'chicken']"
+"Soup, ""simple""",1,15,999,"['soup', 'italian']","['Salt', 'olive oil', 'chicken']"
 No time,2,,888,"['quick']","['Green onion', 'scallion']"
 Long,3,133,777,"['slow']","['pepper']"
 ,4,25,666,"['invalid title']","['not imported']"

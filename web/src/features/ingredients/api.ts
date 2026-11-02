@@ -4,9 +4,15 @@ const ingredientListSchema = z.object({
   ingredients: z.array(z.string()),
 });
 
+const filterOptionsSchema = z.object({
+  categories: z.array(z.string()),
+  cuisines: z.array(z.string()),
+});
+
 const parseResultSchema = z.object({
   included: z.array(z.string()),
   excluded: z.array(z.string()),
+  excludedCategories: z.array(z.string()),
   unrecognized: z.array(z.string()),
 });
 
@@ -53,6 +59,10 @@ export async function fetchIngredientVocabulary(): Promise<string[]> {
   return body.ingredients;
 }
 
+export async function fetchFilterOptions() {
+  return requestJson("/api/filters", filterOptionsSchema);
+}
+
 export async function parseIngredients(text: string) {
   return requestJson(
     "/api/ingredients/parse",
@@ -71,6 +81,8 @@ export async function searchRecipes(
   criteria: {
     included: readonly string[];
     excluded: readonly string[];
+    excludedCategories: readonly string[];
+    cuisines: readonly string[];
   },
   maxMinutes: number | null,
   cursor: string | null = null,
@@ -85,6 +97,8 @@ export async function searchRecipes(
       body: JSON.stringify({
         included: criteria.included,
         excluded: criteria.excluded,
+        excludedCategories: criteria.excludedCategories,
+        cuisines: criteria.cuisines,
         maxMinutes,
         cursor,
       }),

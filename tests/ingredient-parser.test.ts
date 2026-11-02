@@ -20,6 +20,7 @@ describe("parseIngredientText", () => {
     ).toEqual({
       included: ["chicken", "rice", "spinach"],
       excluded: ["butter"],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -28,6 +29,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("green onion tops with olive oil", vocabulary)).toEqual({
       included: ["green onion tops", "olive oil"],
       excluded: [],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -36,6 +38,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("chicken without rice", vocabulary)).toEqual({
       included: ["chicken"],
       excluded: ["rice"],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -44,6 +47,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("CHICKEN!!!, olive oil.", vocabulary)).toEqual({
       included: ["chicken", "olive oil"],
       excluded: [],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -52,7 +56,40 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("no dairy, dragonfruit", vocabulary)).toEqual({
       included: [],
       excluded: [],
+      excludedCategories: [],
       unrecognized: ["dairy", "dragonfruit"],
+    });
+  });
+
+  it("recognizes supported broad category exclusions without expanding them", () => {
+    expect(
+      parseIngredientText(
+        "chicken, no dairy, no fish/seafood",
+        vocabulary,
+        [],
+        ["dairy", "nuts", "meat", "fish/seafood"],
+      ),
+    ).toEqual({
+      included: ["chicken"],
+      excluded: [],
+      excludedCategories: ["dairy", "fish/seafood"],
+      unrecognized: [],
+    });
+  });
+
+  it("recognizes category exclusions in possession negation", () => {
+    expect(
+      parseIngredientText(
+        "I don't have any dairy",
+        vocabulary,
+        [],
+        ["dairy", "nuts", "meat", "fish/seafood"],
+      ),
+    ).toEqual({
+      included: [],
+      excluded: [],
+      excludedCategories: ["dairy"],
+      unrecognized: [],
     });
   });
 
@@ -67,6 +104,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("butter, no butter", vocabulary)).toEqual({
       included: [],
       excluded: ["butter"],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -79,6 +117,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText(text, vocabulary)).toEqual({
       included: [],
       excluded: [ingredient],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -87,6 +126,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("I don't have dragonfruit", vocabulary)).toEqual({
       included: [],
       excluded: [],
+      excludedCategories: [],
       unrecognized: ["dragonfruit"],
     });
   });
@@ -97,11 +137,13 @@ describe("parseIngredientText", () => {
     ).toEqual({
       included: ["green onion"],
       excluded: [],
+      excludedCategories: [],
       unrecognized: [],
     });
     expect(parseIngredientText("no scallion", vocabulary, aliases)).toEqual({
       included: [],
       excluded: ["green onion"],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -115,6 +157,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText(typo, vocabulary)).toEqual({
       included: [canonicalName],
       excluded: [],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -123,6 +166,7 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("green onoin, no buttr", vocabulary)).toEqual({
       included: ["green onion"],
       excluded: ["butter"],
+      excludedCategories: [],
       unrecognized: [],
     });
   });
@@ -131,11 +175,13 @@ describe("parseIngredientText", () => {
     expect(parseIngredientText("btr", ["butter"])).toEqual({
       included: [],
       excluded: [],
+      excludedCategories: [],
       unrecognized: ["btr"],
     });
     expect(parseIngredientText("batter", ["butter", "better"])).toEqual({
       included: [],
       excluded: [],
+      excludedCategories: [],
       unrecognized: ["batter"],
     });
   });

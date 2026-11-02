@@ -15,6 +15,7 @@ import { parse } from "csv-parse";
 import { COOKING_TIME_OUTLIER_THRESHOLD_MINUTES } from "./cooking-time.js";
 import {
   normalizeIngredientName,
+  parseIngredientList,
   prepareRecipeRow,
   type RawRecipeRow,
 } from "./prepare-data.js";
@@ -23,12 +24,22 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_INPUT = join(PROJECT_ROOT, "data", "raw", "RAW_recipes.csv");
 const DEFAULT_OUTPUT = join(PROJECT_ROOT, "data", "prepared");
 const DEFAULT_ALIAS_SOURCE = join(PROJECT_ROOT, "data", "ingredient-aliases.csv");
+const DEFAULT_CATEGORY_SOURCE = join(PROJECT_ROOT, "data", "ingredient-categories.csv");
+const DEFAULT_CUISINE_SOURCE = join(PROJECT_ROOT, "data", "cuisine-tags.csv");
 const REQUIRED_COLUMNS = ["name", "id", "minutes", "tags", "ingredients"];
+const SUPPORTED_INGREDIENT_CATEGORIES = new Set([
+  "dairy",
+  "fish/seafood",
+  "meat",
+  "nuts",
+]);
 const OUTPUT_FILES = [
   "recipes.csv",
   "ingredients.csv",
   "recipe_ingredients.csv",
   "ingredient_aliases.csv",
+  "ingredient_categories.csv",
+  "recipe_cuisines.csv",
   "cooking_time_issues.csv",
   "cooking_time_outliers.csv",
   "invalid_recipes.csv",
@@ -41,6 +52,8 @@ interface PreparationSummary {
   excludedRecipes: number;
   ingredients: number;
   uses: number;
+  ingredientCategories: number;
+  recipeCuisines: number;
   missingCookingTimes: number;
   invalidCookingTimes: number;
   cookingTimeOutliers: number;
@@ -121,21 +134,112 @@ async function loadIngredientAliases(sourcePath: string): Promise<Map<string, st
   return aliases;
 }
 
+async function loadIngredientCategories(
+  sourcePath: string,
+): Promise<Map<string, Set<string>>> {
+  let headersValidated = false;
+  const categories = new Map<string, Set<string>>();
+  const parser = parse({
+    bom: true,
+    columns: (headers: string[]) => {
+      const requiredColumns = ["ingredientName", "category"];
+      const missing = requiredColumns.filter((column) => !headers.includes(column));
+      if (missing.length > 0) {
+        throw new Error(
+          `${sourcePath} is missing required columns: ${missing.join(", ")}.`,
+        );
+      }
+      headersValidated = true;
+      return headers;
+    },
+    skip_empty_lines: true,
+  });
+  const input = createReadStream(sourcePath);
+  input.on("error", (error: Error) => parser.destroy(error));
+  input.pipe(parser);
+
+  for await (const sourceRow of parser) {
+    const row = sourceRow as Record<string, string>;
+    const ingredientName = normalizeIngredientName(row["ingredientName"] ?? "");
+    const category = (row["category"] ?? "").trim().toLowerCase();
+    if (ingredientName === "" || category === "") {
+      throw new Error(`${sourcePath} contains an empty ingredient name or category.`);
+    }
+    if (!SUPPORTED_INGREDIENT_CATEGORIES.has(category)) {
+      throw new Error(`${sourcePath} contains unsupported ingredient category ${category}.`);
+    }
+    const names = categories.get(ingredientName) ?? new Set<string>();
+    if (names.has(category)) {
+      throw new Error(
+        `${sourcePath} contains duplicate category ${category} for ${ingredientName}.`,
+      );
+    }
+    names.add(category);
+    categories.set(ingredientName, names);
+  }
+  if (!headersValidated) throw new Error(`${sourcePath} is empty or missing its header row.`);
+  return categories;
+}
+
+async function loadCuisineTags(sourcePath: string): Promise<Map<string, string>> {
+  let headersValidated = false;
+  const cuisines = new Map<string, string>();
+  const parser = parse({
+    bom: true,
+    columns: (headers: string[]) => {
+      const requiredColumns = ["sourceTag", "cuisineName"];
+      const missing = requiredColumns.filter((column) => !headers.includes(column));
+      if (missing.length > 0) {
+        throw new Error(
+          `${sourcePath} is missing required columns: ${missing.join(", ")}.`,
+        );
+      }
+      headersValidated = true;
+      return headers;
+    },
+    skip_empty_lines: true,
+  });
+  const input = createReadStream(sourcePath);
+  input.on("error", (error: Error) => parser.destroy(error));
+  input.pipe(parser);
+
+  for await (const sourceRow of parser) {
+    const row = sourceRow as Record<string, string>;
+    const sourceTag = normalizeIngredientName(row["sourceTag"] ?? "");
+    const cuisineName = row["cuisineName"]?.trim() ?? "";
+    if (sourceTag === "" || cuisineName === "") {
+      throw new Error(`${sourcePath} contains an empty source tag or cuisine name.`);
+    }
+    if (cuisines.has(sourceTag)) {
+      throw new Error(`${sourcePath} contains duplicate cuisine mapping for ${sourceTag}.`);
+    }
+    cuisines.set(sourceTag, cuisineName);
+  }
+  if (!headersValidated) throw new Error(`${sourcePath} is empty or missing its header row.`);
+  return cuisines;
+}
+
 export async function prepareDataset(
   inputPath: string = DEFAULT_INPUT,
   outputPath: string = DEFAULT_OUTPUT,
   aliasSourcePath: string = DEFAULT_ALIAS_SOURCE,
+  categorySourcePath: string = DEFAULT_CATEGORY_SOURCE,
+  cuisineSourcePath: string = DEFAULT_CUISINE_SOURCE,
 ): Promise<PreparationSummary> {
   const input = resolve(inputPath);
   const output = resolve(outputPath);
   const aliasSource = resolve(aliasSourcePath);
   const aliases = await loadIngredientAliases(aliasSource);
+  const ingredientCategories = await loadIngredientCategories(resolve(categorySourcePath));
+  const cuisineTags = await loadCuisineTags(resolve(cuisineSourcePath));
   const temporaryDirectory = await mkdtemp(join(dirname(output), ".recipe-prep-"));
   const outputStreams = {
     recipes: createWriteStream(join(temporaryDirectory, "recipes.csv")),
     ingredients: createWriteStream(join(temporaryDirectory, "ingredients.csv")),
     uses: createWriteStream(join(temporaryDirectory, "recipe_ingredients.csv")),
     aliases: createWriteStream(join(temporaryDirectory, "ingredient_aliases.csv")),
+    categories: createWriteStream(join(temporaryDirectory, "ingredient_categories.csv")),
+    cuisines: createWriteStream(join(temporaryDirectory, "recipe_cuisines.csv")),
     issues: createWriteStream(join(temporaryDirectory, "cooking_time_issues.csv")),
     outliers: createWriteStream(join(temporaryDirectory, "cooking_time_outliers.csv")),
     invalidRecipes: createWriteStream(join(temporaryDirectory, "invalid_recipes.csv")),
@@ -153,6 +257,8 @@ export async function prepareDataset(
     excludedRecipes: 0,
     ingredients: 0,
     uses: 0,
+    ingredientCategories: 0,
+    recipeCuisines: 0,
     missingCookingTimes: 0,
     invalidCookingTimes: 0,
     cookingTimeOutliers: 0,
@@ -160,6 +266,7 @@ export async function prepareDataset(
   };
   const ingredientStaples = new Map<string, boolean>();
   const recipeIds = new Set<string>();
+  const recipeCuisines = new Map<string, Set<string>>();
 
   try {
     await Promise.all([
@@ -167,6 +274,8 @@ export async function prepareDataset(
       writeCsvRow(outputStreams.ingredients, ["name", "isStaple"]),
       writeCsvRow(outputStreams.uses, ["recipeId", "ingredientName"]),
       writeCsvRow(outputStreams.aliases, ["alias", "canonicalName"]),
+      writeCsvRow(outputStreams.categories, ["ingredientName", "category"]),
+      writeCsvRow(outputStreams.cuisines, ["recipeId", "cuisineName"]),
       writeCsvRow(outputStreams.issues, ["recipeId", "sourceValue", "reason"]),
       writeCsvRow(outputStreams.outliers, ["recipeId", "minutes"]),
       writeCsvRow(outputStreams.invalidRecipes, ["recipeId", "sourceRecord", "reason"]),
@@ -217,6 +326,15 @@ export async function prepareDataset(
           cause: error,
         });
       }
+      let sourceTags: string[];
+      try {
+        const rawTags = (row["tags"] ?? "").trim();
+        sourceTags = rawTags === "" ? [] : parseIngredientList(rawTags);
+      } catch (error) {
+        throw new Error(`Unable to parse tags in source record ${sourceRecord}.`, {
+          cause: error,
+        });
+      }
 
       summary.recipes += 1;
       await writeCsvRow(outputStreams.recipes, [
@@ -224,6 +342,15 @@ export async function prepareDataset(
         prepared.recipe.name,
         prepared.recipe.minutes,
       ]);
+
+      const recipeCuisineNames = new Set<string>();
+      for (const sourceTag of sourceTags) {
+        const cuisineName = cuisineTags.get(normalizeIngredientName(sourceTag));
+        if (cuisineName !== undefined) recipeCuisineNames.add(cuisineName);
+      }
+      if (recipeCuisineNames.size > 0) {
+        recipeCuisines.set(prepared.recipe.id, recipeCuisineNames);
+      }
 
       for (const ingredient of prepared.ingredients) {
         const canonicalName = aliases.get(ingredient.name) ?? ingredient.name;
@@ -277,6 +404,34 @@ export async function prepareDataset(
         );
       }
       await writeCsvRow(outputStreams.aliases, [alias, canonicalName]);
+    }
+    const canonicalCategories = new Map<string, Set<string>>();
+    for (const [ingredientName, categories] of ingredientCategories) {
+      const canonicalName = aliases.get(ingredientName) ?? ingredientName;
+      if (!ingredientStaples.has(canonicalName)) {
+        throw new Error(
+          `${ingredientName} in ${categorySourcePath} is not present in the prepared ingredients.`,
+        );
+      }
+      const targetCategories = canonicalCategories.get(canonicalName) ?? new Set<string>();
+      for (const category of categories) targetCategories.add(category);
+      canonicalCategories.set(canonicalName, targetCategories);
+    }
+    for (const [ingredientName, categories] of [...canonicalCategories.entries()].sort(
+      ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+    )) {
+      for (const category of [...categories].sort()) {
+        await writeCsvRow(outputStreams.categories, [ingredientName, category]);
+        summary.ingredientCategories += 1;
+      }
+    }
+    for (const [recipeId, cuisines] of [...recipeCuisines.entries()].sort(
+      ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+    )) {
+      for (const cuisineName of [...cuisines].sort()) {
+        await writeCsvRow(outputStreams.cuisines, [recipeId, cuisineName]);
+        summary.recipeCuisines += 1;
+      }
     }
     summary.ingredients = ingredientStaples.size;
     if (!headersValidated) throw new Error("RAW_recipes.csv is empty or missing its header row.");

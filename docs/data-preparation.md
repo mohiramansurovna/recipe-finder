@@ -1,6 +1,6 @@
 # Data Preparation
 
-The preparation pipeline consumes the pinned Kaggle version 2 archive and writes the initial graph CSVs locally. It uses only `RAW_recipes.csv`; interaction and preprocessed files are not used in change 001.
+The preparation pipeline consumes the pinned Kaggle version 2 archive and writes graph-ready CSVs locally. It uses only `RAW_recipes.csv`; interaction and preprocessed files are not used.
 
 ## Run
 
@@ -18,7 +18,7 @@ To validate the pipeline with the small synthetic fixture instead of the full da
 npm run prepare:data -- --input tests/fixtures/RAW_recipes.csv --output /tmp/recipe-graph-prepared
 ```
 
-The command accepts `--input` and `--output`; the defaults are `data/raw/RAW_recipes.csv` and `data/prepared/`. The command streams CSV records and writes outputs only after processing has completed. Missing or duplicate recipe IDs and malformed ingredient-list values stop preparation with an explicit error. Recipes with an ID but no usable name are excluded and listed in `invalid_recipes.csv`.
+The command accepts `--input` and `--output`; the defaults are `data/raw/RAW_recipes.csv` and `data/prepared/`. It also reads the curated `data/ingredient-aliases.csv`, `data/ingredient-categories.csv`, and `data/cuisine-tags.csv` mappings. The command streams source records and writes outputs only after processing has completed. Missing or duplicate recipe IDs, malformed ingredient or tag lists, invalid mapping data, and category mappings for ingredients absent from the prepared vocabulary stop preparation with an explicit error. Recipes with an ID but no usable name are excluded and listed in `invalid_recipes.csv`.
 
 ## Output contract
 
@@ -27,12 +27,14 @@ The command accepts `--input` and `--output`; the defaults are `data/raw/RAW_rec
 | `recipes.csv` | `id,name,minutes` | Recipe graph nodes; blank `minutes` represents a missing property |
 | `ingredients.csv` | `name,isStaple` | Unique mechanically normalized ingredient names and explicit staple flags |
 | `recipe_ingredients.csv` | `recipeId,ingredientName` | One USES edge per recipe and distinct normalized ingredient |
+| `ingredient_categories.csv` | `ingredientName,category` | Curated category membership for canonical ingredients |
+| `recipe_cuisines.csv` | `recipeId,cuisineName` | Recipe cuisine matches from explicitly mapped source tags |
 | `cooking_time_issues.csv` | `recipeId,sourceValue,reason` | Missing or invalid source cooking times, which are kept as null |
 | `cooking_time_outliers.csv` | `recipeId,minutes` | Valid cooking times flagged as suspected outliers but preserved unchanged |
 | `invalid_recipes.csv` | `recipeId,sourceRecord,reason` | Excluded rows that cannot satisfy the graph's required recipe name |
 | `summary.json` | counts and threshold | Processing totals without source contributor fields |
 
-Only fields required by the initial graph are written. Contributor identity fields, tags, recipe instructions, and other source metadata are not copied to prepared output. Ingredient-list values are parsed as data; they are never evaluated as code. Normalization lowercases names and strips surrounding whitespace and punctuation without merging semantic variants. The explicit initial staple set is `salt`, `oil`, `olive oil`, `vegetable oil`, and `canola oil`.
+Only fields required by the graph are written. Contributor identity fields, raw tags, recipe instructions, and other source metadata are not copied to prepared output. Tags are parsed as data and only tags listed in `data/cuisine-tags.csv` contribute canonical cuisine rows. Ingredient category mappings in `data/ingredient-categories.csv` are explicit, not inferred; names are normalized and aliases are resolved before mapped ingredients are checked against the prepared vocabulary. Unmapped ingredients remain unclassified. Ingredient-list and tag values are parsed as data; they are never evaluated as code. Normalization lowercases names and strips surrounding whitespace and punctuation without merging semantic variants. The explicit initial staple set is `salt`, `oil`, `olive oil`, `vegetable oil`, and `canola oil`.
 
 ## Cooking-time report rule
 
@@ -64,7 +66,7 @@ This permanently removes the local graph and its Compose import marker. Removing
 
 ## Import into Neo4j
 
-For a local Compose environment, follow [Run the local Compose environment](#run-the-local-compose-environment). The direct importer workflow below is for a separately managed, reachable Neo4j database and always requires an empty graph. It validates all prepared CSVs before connecting, checks the selected database is empty before adding constraints or data, and creates uniqueness constraints for recipe IDs and ingredient names. It batches node and relationship writes in groups of 1,000. Missing cooking times remain unset as the Neo4j `minutes` property.
+For a local Compose environment, follow [Run the local Compose environment](#run-the-local-compose-environment). The direct importer workflow below is for a separately managed, reachable Neo4j database and always requires an empty graph. It validates all prepared CSVs before connecting, checks the selected database is empty before adding constraints or data, and creates uniqueness constraints for recipe IDs, ingredient names, ingredient-category names, and cuisine names. It batches node and relationship writes in groups of 1,000. Missing cooking times remain unset as the Neo4j `minutes` property.
 
 Set connection details in the process environment; do not put credentials in source files or commit them:
 

@@ -8,6 +8,10 @@ import type {
   IngredientAlias,
   IngredientRepository,
 } from "../api/src/features/ingredients/ingredient-repository.js";
+import type {
+  RecipeSearchPage,
+  RecipeSearchRepository,
+} from "../api/src/features/recipes/recipe-search-types.js";
 
 const invalidRequests: { description: string; body: Record<string, unknown> | undefined }[] = [
   { body: undefined, description: "missing text" },
@@ -32,6 +36,21 @@ class TestIngredientRepository implements IngredientRepository {
     if (this.failure) throw this.failure;
     return this.aliases;
   }
+
+  async getIngredientCategories() {
+    if (this.failure) throw this.failure;
+    return ["dairy", "fish/seafood", "meat", "nuts"];
+  }
+}
+
+class TestRecipeSearchRepository implements RecipeSearchRepository {
+  async getCuisineNames() {
+    return ["Italian", "Mexican"];
+  }
+
+  async search(): Promise<RecipeSearchPage> {
+    return { recipes: [], nextCursor: null };
+  }
 }
 
 describe("ingredient API", () => {
@@ -50,6 +69,22 @@ describe("ingredient API", () => {
       .expect({ ingredients: ["green onion"] });
   });
 
+  it("returns filter options from the test graph", async () => {
+    const app = createApiApp(
+      new TestIngredientRepository(["green onion"]),
+      100,
+      new TestRecipeSearchRepository(),
+    );
+
+    await request(app)
+      .get("/api/filters")
+      .expect(200)
+      .expect({
+        categories: ["dairy", "fish/seafood", "meat", "nuts"],
+        cuisines: ["Italian", "Mexican"],
+      });
+  });
+
   it("parses a request against the test graph vocabulary", async () => {
     const app = createApiApp(new TestIngredientRepository(["butter", "chicken", "rice"]));
 
@@ -60,6 +95,22 @@ describe("ingredient API", () => {
       .expect({
         included: ["chicken", "rice"],
         excluded: ["butter"],
+        excludedCategories: [],
+        unrecognized: [],
+      });
+  });
+
+  it("parses supported broad exclusions as category criteria", async () => {
+    const app = createApiApp(new TestIngredientRepository(["chicken"]));
+
+    await request(app)
+      .post("/api/ingredients/parse")
+      .send({ text: "chicken, no dairy" })
+      .expect(200)
+      .expect({
+        included: ["chicken"],
+        excluded: [],
+        excludedCategories: ["dairy"],
         unrecognized: [],
       });
   });
@@ -80,6 +131,7 @@ describe("ingredient API", () => {
       .expect({
         included: ["chicken"],
         excluded: ["green onion"],
+        excludedCategories: [],
         unrecognized: ["dragonfruit"],
       });
   });

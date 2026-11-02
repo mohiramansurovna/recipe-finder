@@ -6,4 +6,5 @@ export interface IngredientAlias {
 export interface IngredientRepository {
   getIngredientNames(): Promise<readonly string[]>;
   getIngredientAliases(): Promise<readonly IngredientAlias[]>;
+  getIngredientCategories(): Promise<readonly string[]>;
 }

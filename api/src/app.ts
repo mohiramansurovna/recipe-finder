@@ -27,10 +27,22 @@ const ingredientCriteriaSchema = z
   .array(z.string().trim().min(1).max(200))
   .max(100)
   .refine((ingredients) => new Set(ingredients).size === ingredients.length);
+const categoryCriteriaSchema = z
+  .array(z.enum(["dairy", "nuts", "meat", "fish/seafood"]))
+  .max(4)
+  .default([])
+  .refine((categories) => new Set(categories).size === categories.length);
+const cuisineCriteriaSchema = z
+  .array(z.string().trim().min(1).max(100))
+  .max(50)
+  .default([])
+  .refine((cuisines) => new Set(cuisines).size === cuisines.length);
 const recipeSearchRequestSchema = z
   .object({
     included: ingredientCriteriaSchema,
     excluded: ingredientCriteriaSchema,
+    excludedCategories: categoryCriteriaSchema,
+    cuisines: cuisineCriteriaSchema,
     maxMinutes: z.union([z.literal(15), z.literal(30), z.literal(60)]).nullable().default(null),
     cursor: z.string().min(1).max(4096).nullable().default(null),
   })
@@ -83,6 +95,32 @@ export function createApiApp(
     }
   });
 
+  app.get("/api/filters", async (_request: Request, response: Response, next) => {
+    if (recipeSearchRepository === undefined) {
+      next(
+        new ApiError(
+          503,
+          "SEARCH_UNAVAILABLE",
+          "Recipe filters are temporarily unavailable.",
+        ),
+      );
+      return;
+    }
+    try {
+      const [categories, cuisines] = await Promise.all([
+        ingredientRepository.getIngredientCategories(),
+        recipeSearchRepository.getCuisineNames(),
+      ]);
+      response.json({ categories, cuisines });
+    } catch (error) {
+      next(
+        new ApiError(503, "GRAPH_UNAVAILABLE", "Recipe filters are temporarily unavailable.", {
+          cause: error,
+        }),
+      );
+    }
+  });
+
   app.post("/api/ingredients/parse", async (request: Request, response: Response, next) => {
     const parsedRequest = parseRequestSchema.safeParse(request.body);
     if (!parsedRequest.success) {
@@ -91,11 +129,14 @@ export function createApiApp(
     }
 
     try {
-      const [vocabulary, aliases] = await Promise.all([
+      const [vocabulary, aliases, categories] = await Promise.all([
         ingredientRepository.getIngredientNames(),
         ingredientRepository.getIngredientAliases(),
+        ingredientRepository.getIngredientCategories(),
       ]);
-      response.json(parseIngredientText(parsedRequest.data.text, vocabulary, aliases));
+      response.json(
+        parseIngredientText(parsedRequest.data.text, vocabulary, aliases, categories),
+      );
     } catch (error) {
       next(
         new ApiError(
@@ -132,6 +173,16 @@ export function createApiApp(
     }
 
     try {
+      const availableCuisines = new Set(await recipeSearchRepository.getCuisineNames());
+      if (parsedRequest.data.cuisines.some((cuisine) => !availableCuisines.has(cuisine))) {
+        sendError(
+          response,
+          400,
+          "INVALID_REQUEST",
+          "Cuisine selections must match available recipe cuisines.",
+        );
+        return;
+      }
       response.json(await recipeSearchRepository.search(parsedRequest.data));
     } catch (error) {
       if (error instanceof InvalidRecipeSearchCursorError) {

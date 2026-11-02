@@ -1,6 +1,8 @@
 export interface RecipeSearchCriteria {
   included: readonly string[];
   excluded: readonly string[];
+  excludedCategories: readonly string[];
+  cuisines: readonly string[];
   maxMinutes: number | null;
   cursor: string | null;
 }
@@ -27,6 +29,7 @@ export interface RecipeSearchPage {
 }
 
 export interface RecipeSearchRepository {
+  getCuisineNames(): Promise<readonly string[]>;
   search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage>;
 }
 

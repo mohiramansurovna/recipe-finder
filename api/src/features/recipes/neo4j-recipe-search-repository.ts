@@ -31,7 +31,18 @@ interface ScoredRecipeSearchRecord {
 
 const SEARCH_QUERY = `
 MATCH (recipe:Recipe)
-WHERE $maxMinutes IS NULL OR recipe.minutes <= $maxMinutes
+WHERE ($maxMinutes IS NULL OR recipe.minutes <= $maxMinutes)
+  AND NOT EXISTS {
+    MATCH (recipe)-[:USES]->(:Ingredient)-[:IN_CATEGORY]->(category:IngredientCategory)
+    WHERE category.name IN $excludedCategories
+  }
+  AND (
+    size($cuisines) = 0
+    OR EXISTS {
+      MATCH (recipe)-[:IN_CUISINE]->(cuisine:Cuisine)
+      WHERE cuisine.name IN $cuisines
+    }
+  )
 OPTIONAL MATCH (recipe)-[:USES]->(ingredient:Ingredient)
 WITH recipe, collect(DISTINCT ingredient.name) AS ingredientNames
 WITH recipe, ingredientNames,
@@ -85,6 +96,20 @@ export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
     private readonly database: string,
   ) {}
 
+  async getCuisineNames(): Promise<readonly string[]> {
+    const session = this.driver.session({ database: this.database });
+    try {
+      const result = await session.run(
+        `MATCH (cuisine:Cuisine)
+         RETURN cuisine.name AS name
+         ORDER BY name`,
+      );
+      return result.records.map((record) => readString(record.get("name"), "cuisine name"));
+    } finally {
+      await session.close();
+    }
+  }
+
   async search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage> {
     const fingerprint = recipeSearchFingerprint(criteria);
     const position =
@@ -97,6 +122,8 @@ export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
       const result = await session.run(SEARCH_QUERY, {
         included: [...new Set(criteria.included)],
         excluded: [...new Set(criteria.excluded)],
+        excludedCategories: [...new Set(criteria.excludedCategories)],
+        cuisines: [...new Set(criteria.cuisines)],
         maxMinutes: criteria.maxMinutes,
         cursorMissing: position?.missingCount ?? null,
         cursorMatched: position?.matchedCount ?? null,

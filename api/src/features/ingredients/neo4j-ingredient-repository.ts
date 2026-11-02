@@ -54,4 +54,24 @@ export class Neo4jIngredientRepository implements IngredientRepository {
       await session.close();
     }
   }
+
+  async getIngredientCategories(): Promise<readonly string[]> {
+    const session = this.driver.session({ database: this.database });
+    try {
+      const result = await session.run(
+        `MATCH (category:IngredientCategory)
+         RETURN category.name AS name
+         ORDER BY name`,
+      );
+      return result.records.map((record) => {
+        const name: unknown = record.get("name");
+        if (typeof name !== "string") {
+          throw new Error("Neo4j returned an ingredient category without a valid name.");
+        }
+        return name;
+      });
+    } finally {
+      await session.close();
+    }
+  }
 }

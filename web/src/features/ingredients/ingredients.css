@@ -131,6 +131,71 @@
   margin-top: 2rem;
 }
 
+.search-filters {
+  display: grid;
+  gap: 1rem;
+}
+
+.filter-fieldset {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #d8dfd5;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: white;
+}
+
+.filter-fieldset legend {
+  padding: 0 0.35rem;
+  font-weight: 700;
+}
+
+.vegetarian-preset,
+.clear-cuisines {
+  justify-self: start;
+}
+
+.category-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.filter-chip {
+  border: 1px solid #c5d5c7;
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  color: #244b34;
+  background: white;
+}
+
+.filter-chip[aria-pressed="true"],
+.vegetarian-preset[aria-pressed="true"] {
+  color: #183a26;
+  background: #dce9dd;
+  box-shadow: inset 0 0 0 1px #729179;
+}
+
+.cuisine-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.cuisine-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filter-fieldset button:focus-visible,
+.cuisine-options input:focus-visible {
+  outline: 3px solid #315d3b;
+  outline-offset: 2px;
+}
+
 .time-filter {
   display: flex;
   align-items: center;

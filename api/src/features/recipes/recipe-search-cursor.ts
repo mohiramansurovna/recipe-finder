@@ -34,11 +34,16 @@ export class InvalidRecipeSearchCursorError extends Error {
 }
 
 export function recipeSearchFingerprint(
-  criteria: Pick<RecipeSearchCriteria, "included" | "excluded" | "maxMinutes">,
+  criteria: Pick<
+    RecipeSearchCriteria,
+    "included" | "excluded" | "excludedCategories" | "cuisines" | "maxMinutes"
+  >,
 ): string {
   const canonicalCriteria = JSON.stringify({
     included: [...new Set(criteria.included)].sort(),
     excluded: [...new Set(criteria.excluded)].sort(),
+    excludedCategories: [...new Set(criteria.excludedCategories)].sort(),
+    cuisines: [...new Set(criteria.cuisines)].sort(),
     maxMinutes: criteria.maxMinutes,
   });
   return createHash("sha256").update(canonicalCriteria).digest("base64url");

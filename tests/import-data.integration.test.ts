@@ -4,6 +4,7 @@ import neo4j from "neo4j-driver";
 import { describe, expect, it } from "vitest";
 
 import { Neo4jIngredientRepository } from "../api/src/features/ingredients/neo4j-ingredient-repository.js";
+import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/neo4j-recipe-search-repository.js";
 import { importPreparedData } from "../scripts/import-data.js";
 
 const preparedFixtureDirectory = join(
@@ -36,7 +37,14 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
     try {
       await expect(
         importPreparedData(preparedFixtureDirectory, testConfig),
-      ).resolves.toEqual({ recipes: 2, ingredients: 2, uses: 2, aliases: 1 });
+      ).resolves.toEqual({
+        recipes: 2,
+        ingredients: 3,
+        uses: 3,
+        aliases: 1,
+        ingredientCategories: 1,
+        recipeCuisines: 2,
+      });
 
       const session = driver.session({ database: testConfig.database });
       try {
@@ -67,10 +75,19 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
           uses: integer("useCount"),
         }).toEqual({
           recipes: 2,
-          ingredients: 3,
+          ingredients: 4,
           recipesWithoutMinutes: 1,
-          uses: 2,
+          uses: 3,
         });
+        const classifications = await session.run(
+          `MATCH (chicken:Ingredient {name: 'chicken'})-[:IN_CATEGORY]->(category:IngredientCategory)
+           MATCH (recipe:Recipe {id: '2'})-[:IN_CUISINE]->(cuisine:Cuisine)
+           RETURN category.name AS category, cuisine.name AS cuisine`,
+        );
+        expect(classifications.records.map((record) => [
+          record.get("category"),
+          record.get("cuisine"),
+        ])).toEqual([["meat", "Mexican"]]);
         const aliases = await session.run(
           "MATCH (alias:Ingredient {name: 'peppercorn'})-[:ALIAS_OF]->(canonical:Ingredient) RETURN canonical.name AS name",
         );
@@ -89,12 +106,19 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
           testConfig.database,
         );
         await expect(ingredientRepository.getIngredientNames()).resolves.toEqual([
+          "chicken",
           "pepper",
           "salt",
         ]);
         await expect(ingredientRepository.getIngredientAliases()).resolves.toEqual([
           { alias: "peppercorn", canonicalName: "pepper" },
         ]);
+        await expect(ingredientRepository.getIngredientCategories()).resolves.toEqual([
+          "meat",
+        ]);
+        await expect(
+          new Neo4jRecipeSearchRepository(driver, testConfig.database).getCuisineNames(),
+        ).resolves.toEqual(["Italian", "Mexican"]);
       } finally {
         await session.close();
       }

@@ -5,17 +5,33 @@ browser -> Caddy -> API (Express) -> Neo4j
 Caddy -> built React/Vite assets
 
 ## Components
-- web: React + Vite. The Compose web build publishes static assets to a
-  shared volume that Caddy serves.
+- web: React + Vite. The search interface has editable ingredient-category
+  exclusion chips, a Vegetarian preset for meat and fish/seafood, and
+  multi-select cuisine checkboxes. Changing ingredients, categories, cuisines,
+  or cooking time restarts search at the first page. The Compose web build
+  publishes static assets to a shared volume that Caddy serves.
 - api: Node.js, TypeScript, Express. Zod validates requests; the API
   parses ingredient text against canonical Ingredient names and
   `ALIAS_OF` relationships in Neo4j. The pure parser resolves curated
   aliases and unique one-edit spelling variants to canonical names, and
-  recognizes specific negation including “do not have” phrasing.
-  Canonical criteria are used for cursor-paginated recipe search over the
-  Recipe/Ingredient graph. Search ranks by missing and matched ingredients,
-  then excluded matches and stable recipe ID. Vitest and Supertest cover
-  parser, search, API, and UI behavior.
+  recognizes specific negation including “do not have” phrasing. Supported
+  category exclusions are returned separately from named-ingredient
+  exclusions.
+  `GET /api/filters` returns category and cuisine options from the graph.
+  `POST /api/ingredients/parse` returns included, excluded,
+  excluded-category, and unrecognized criteria. `POST /api/recipes/search`
+  accepts included and excluded ingredients, excluded categories, selected
+  cuisines, an optional maximum time, and an optional cursor; request
+  validation rejects duplicate or unsupported categories and cuisines not
+  present in the graph. Search excludes a recipe if any of its ingredients
+  belongs to a selected excluded category. Selected cuisines use OR semantics;
+  when cuisines are selected, recipes without a matching cuisine are excluded.
+  These graph filters run before pagination, preserving ranking by missing
+  and matched ingredients, then excluded matches and stable recipe ID.
+  Cursors are bound to canonical ingredient, category, cuisine, and time
+  criteria; clients must reset pagination when any search criterion changes,
+  and the API rejects a cursor reused with different criteria.
+  Vitest and Supertest cover parser, search, API, and UI behavior.
 - neo4j: Neo4j Community in Docker with explicit memory limits.
 - caddy: serves the frontend and reverse proxies /api to the API.
   Handles HTTPS in the demo.

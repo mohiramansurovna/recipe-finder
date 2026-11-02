@@ -32,6 +32,14 @@ async function makePreparedDirectory(): Promise<string> {
       join(dataDirectory, "ingredient_aliases.csv"),
       "alias,canonicalName\nsea salt,salt\n",
     ),
+    writeFile(
+      join(dataDirectory, "ingredient_categories.csv"),
+      "ingredientName,category\nsalt,dairy\n",
+    ),
+    writeFile(
+      join(dataDirectory, "recipe_cuisines.csv"),
+      "recipeId,cuisineName\n1,Italian\n",
+    ),
   ]);
   return dataDirectory;
 }
@@ -58,6 +66,8 @@ describe("prepared data validation", () => {
       ingredients: 1,
       uses: 1,
       aliases: 1,
+      ingredientCategories: 1,
+      recipeCuisines: 1,
     });
   });
 
@@ -91,6 +101,36 @@ describe("prepared data validation", () => {
     );
     await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
       "unknown canonical ingredient",
+    );
+  });
+
+  it("rejects invalid ingredient category data", async () => {
+    const dataDirectory = await makePreparedDirectory();
+    await writeFile(
+      join(dataDirectory, "ingredient_categories.csv"),
+      "ingredientName,category\nmissing,dairy\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "ingredient_categories.csv row 2 references an unknown ingredient",
+    );
+
+    await writeFile(
+      join(dataDirectory, "ingredient_categories.csv"),
+      "ingredientName,category\nsalt,vegetarian\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "has an unsupported category",
+    );
+  });
+
+  it("rejects cuisine relationships to unknown recipes", async () => {
+    const dataDirectory = await makePreparedDirectory();
+    await writeFile(
+      join(dataDirectory, "recipe_cuisines.csv"),
+      "recipeId,cuisineName\nunknown,Italian\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "recipe_cuisines.csv row 2 references an unknown recipe",
     );
   });
 

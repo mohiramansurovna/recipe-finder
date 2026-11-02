@@ -42,6 +42,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         { id: `${prefix}-rank-04`, name: "One missing", minutes: 15 },
         { id: `${prefix}-rank-05`, name: "Unknown time", minutes: null },
         { id: `${prefix}-alias-search`, name: "Canonical alias match", minutes: 18 },
+        { id: `${prefix}-seafood`, name: "Seafood recipe", minutes: 12 },
         ...Array.from({ length: 25 }, (_, index) => ({
           id: `${prefix}-page-${String(index).padStart(3, "0")}`,
           name: `Page recipe ${index}`,
@@ -55,6 +56,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         "tomato",
         "green onion",
         "scallion",
+        "salmon",
         ...Array.from({ length: 25 }, (_, index) => `page ingredient ${index}`),
       ].map((name) => `${prefix}-${name}`);
       const seedUses = [
@@ -72,6 +74,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         { id: `${prefix}-alias-search`, ingredient: "chicken" },
         { id: `${prefix}-alias-search`, ingredient: "green onion" },
         { id: `${prefix}-alias-search`, ingredient: "butter" },
+        { id: `${prefix}-seafood`, ingredient: "salmon" },
         ...Array.from({ length: 25 }, (_, index) => ({
           id: `${prefix}-page-${String(index).padStart(3, "0")}`,
           ingredient: `page ingredient ${index}`,
@@ -116,6 +119,45 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
             canonical: `${prefix}-green onion`,
           },
         );
+        await seedSession.run(
+          `UNWIND $categories AS name
+           CREATE (:IngredientCategory {name: name, testRun: $testRun})`,
+          {
+            categories: ["dairy", "fish/seafood", "meat", "nuts"],
+            testRun: prefix,
+          },
+        );
+        await seedSession.run(
+          `UNWIND $links AS row
+           MATCH (ingredient:Ingredient {name: row.ingredient})
+           MATCH (category:IngredientCategory {name: row.category})
+           CREATE (ingredient)-[:IN_CATEGORY]->(category)`,
+          {
+            links: [
+              { ingredient: `${prefix}-chicken`, category: "meat" },
+              { ingredient: `${prefix}-butter`, category: "dairy" },
+              { ingredient: `${prefix}-salmon`, category: "fish/seafood" },
+            ],
+          },
+        );
+        await seedSession.run(
+          `UNWIND $cuisines AS name
+           CREATE (:Cuisine {name: name, testRun: $testRun})`,
+          { cuisines: ["Italian", "Mexican"], testRun: prefix },
+        );
+        await seedSession.run(
+          `UNWIND $links AS row
+           MATCH (recipe:Recipe {id: row.recipe})
+           MATCH (cuisine:Cuisine {name: row.cuisine})
+           CREATE (recipe)-[:IN_CUISINE]->(cuisine)`,
+          {
+            links: [
+              { recipe: `${prefix}-rank-01`, cuisine: "Italian" },
+              { recipe: `${prefix}-rank-02`, cuisine: "Mexican" },
+              { recipe: `${prefix}-seafood`, cuisine: "Italian" },
+            ],
+          },
+        );
       } finally {
         await seedSession.close();
       }
@@ -126,6 +168,13 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         100,
         repository,
       );
+      await request(app)
+        .get("/api/filters")
+        .expect(200)
+        .expect({
+          categories: ["dairy", "fish/seafood", "meat", "nuts"],
+          cuisines: ["Italian", "Mexican"],
+        });
       const parsedCriteria = {
         included: [`${prefix}-green onion`, `${prefix}-chicken`],
         excluded: [`${prefix}-butter`],
@@ -138,6 +187,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         .expect(200)
         .expect({
           ...parsedCriteria,
+          excludedCategories: [],
           unrecognized: [],
         });
       await request(app)
@@ -157,6 +207,8 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
       const anyTimePage = await repository.search({
         included: [`${prefix}-chicken`, `${prefix}-rice`],
         excluded: [`${prefix}-butter`],
+        excludedCategories: [],
+        cuisines: [],
         maxMinutes: null,
         cursor: null,
       });
@@ -176,6 +228,8 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
       const limitedPage = await repository.search({
         included: [`${prefix}-chicken`, `${prefix}-rice`],
         excluded: [`${prefix}-butter`],
+        excludedCategories: [],
+        cuisines: [],
         maxMinutes: 15,
         cursor: null,
       });
@@ -188,9 +242,57 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
           ?.missingIngredients,
       ).toContain(`${prefix}-tomato`);
 
+      const dairyExcluded = await repository.search({
+        included: [`${prefix}-chicken`, `${prefix}-rice`],
+        excluded: [],
+        excludedCategories: ["dairy"],
+        cuisines: [],
+        maxMinutes: null,
+        cursor: null,
+      });
+      const dairyExcludedIds = dairyExcluded.recipes.map((recipe) => recipe.id);
+      expect(dairyExcludedIds).not.toContain(`${prefix}-rank-02`);
+      expect(dairyExcludedIds).not.toContain(`${prefix}-alias-search`);
+      expect(dairyExcludedIds).toContain(`${prefix}-rank-01`);
+
+      const vegetarian = await repository.search({
+        included: [],
+        excluded: [],
+        excludedCategories: ["meat", "fish/seafood"],
+        cuisines: [],
+        maxMinutes: null,
+        cursor: null,
+      });
+      const vegetarianIds = vegetarian.recipes.map((recipe) => recipe.id);
+      expect(vegetarianIds).not.toContain(`${prefix}-rank-01`);
+      expect(vegetarianIds).not.toContain(`${prefix}-seafood`);
+      expect(vegetarianIds).toContain(`${prefix}-page-000`);
+
+      expect(await repository.getCuisineNames()).toEqual(["Italian", "Mexican"]);
+      const selectedCuisines = await repository.search({
+        included: [],
+        excluded: [],
+        excludedCategories: [],
+        cuisines: ["Italian", "Mexican"],
+        maxMinutes: null,
+        cursor: null,
+      });
+      const selectedCuisineIds = new Set(
+        selectedCuisines.recipes.map((recipe) => recipe.id),
+      );
+      expect(selectedCuisineIds).toEqual(
+        new Set([
+          `${prefix}-rank-01`,
+          `${prefix}-rank-02`,
+          `${prefix}-seafood`,
+        ]),
+      );
+
       const firstBrowsePage = await repository.search({
         included: [],
         excluded: [],
+        excludedCategories: [],
+        cuisines: [],
         maxMinutes: null,
         cursor: null,
       });
@@ -205,6 +307,8 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
       const secondBrowsePage = await repository.search({
         included: [],
         excluded: [],
+        excludedCategories: [],
+        cuisines: [],
         maxMinutes: null,
         cursor: firstBrowsePage.nextCursor,
       });
@@ -216,6 +320,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
           .slice(0, 5)
           .concat(
             `${prefix}-rank-05`,
+            `${prefix}-seafood`,
             `${prefix}-rank-01`,
             `${prefix}-rank-03`,
             `${prefix}-alias-search`,
@@ -232,8 +337,9 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
             `MATCH (node)
              WHERE (node:Recipe AND node.id STARTS WITH $prefix)
                 OR (node:Ingredient AND node.name STARTS WITH $prefix)
+                OR ((node:IngredientCategory OR node:Cuisine) AND node.testRun = $testRun)
              DETACH DELETE node`,
-            { prefix: `${prefix}-` },
+            { prefix: `${prefix}-`, testRun: prefix },
           );
         } finally {
           await cleanupSession.close();

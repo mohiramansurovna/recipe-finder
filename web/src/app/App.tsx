@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import {
+  fetchFilterOptions,
   fetchIngredientVocabulary,
   parseIngredients,
   searchRecipes,
@@ -21,13 +22,21 @@ import "../styles/global.css";
 const emptyCriteria: IngredientCriteria = {
   included: [],
   excluded: [],
+  excludedCategories: [],
   unrecognized: [],
 };
+
+const vegetarianExclusions = ["meat", "fish/seafood"];
 
 export default function App() {
   const [text, setText] = useState("");
   const [criteria, setCriteria] = useState(emptyCriteria);
   const [vocabulary, setVocabulary] = useState<string[]>([]);
+  const [filterOptions, setFilterOptions] = useState({
+    categories: [] as string[],
+    cuisines: [] as string[],
+  });
+  const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [isLoadingVocabulary, setIsLoadingVocabulary] = useState(true);
   const [isParsing, setIsParsing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -48,14 +57,19 @@ export default function App() {
   const criteriaKey = JSON.stringify([
     criteria.included,
     criteria.excluded,
+    criteria.excludedCategories,
+    selectedCuisines,
     maxMinutes,
   ]);
 
   useEffect(() => {
     let active = true;
-    fetchIngredientVocabulary()
-      .then((ingredients) => {
-        if (active) setVocabulary(ingredients);
+    Promise.all([fetchIngredientVocabulary(), fetchFilterOptions()])
+      .then(([ingredients, options]) => {
+        if (active) {
+          setVocabulary(ingredients);
+          setFilterOptions(options);
+        }
       })
       .catch((error: unknown) => {
         if (active) {
@@ -84,7 +98,12 @@ export default function App() {
     setPageCriteriaKey(null);
     setIsSearching(true);
     setSearchError("");
-    searchRecipes(criteria, maxMinutes, null, controller.signal)
+    searchRecipes(
+      { ...criteria, cuisines: selectedCuisines },
+      maxMinutes,
+      null,
+      controller.signal,
+    )
       .then((page) => {
         if (!controller.signal.aborted) {
           setRecipePage(page);
@@ -106,7 +125,7 @@ export default function App() {
       controller.abort();
       if (searchControllerRef.current === controller) searchControllerRef.current = null;
     };
-  }, [criteria, criteriaKey, maxMinutes, searchEnabled, searchRetry]);
+  }, [criteria, criteriaKey, maxMinutes, searchEnabled, searchRetry, selectedCuisines]);
 
   const loadMore = useCallback(async () => {
     const cursor = recipePage.nextCursor;
@@ -124,7 +143,12 @@ export default function App() {
     setIsLoadingMore(true);
     setSearchError("");
     try {
-      const page = await searchRecipes(criteria, maxMinutes, cursor, controller.signal);
+      const page = await searchRecipes(
+        { ...criteria, cuisines: selectedCuisines },
+        maxMinutes,
+        cursor,
+        controller.signal,
+      );
       if (!controller.signal.aborted) {
         setRecipePage((current) => {
           const knownIds = new Set(current.recipes.map((recipe) => recipe.id));
@@ -149,7 +173,14 @@ export default function App() {
         if (!controller.signal.aborted) setIsLoadingMore(false);
       }
     }
-  }, [criteria, criteriaKey, maxMinutes, pageCriteriaKey, recipePage.nextCursor]);
+  }, [
+    criteria,
+    criteriaKey,
+    maxMinutes,
+    pageCriteriaKey,
+    recipePage.nextCursor,
+    selectedCuisines,
+  ]);
 
   useEffect(() => {
     const sentinel = loadMoreSentinelRef.current;
@@ -188,6 +219,7 @@ export default function App() {
 
   function removeIngredient(ingredient: string) {
     setCriteria((current) => ({
+      ...current,
       included: current.included.filter((name) => name !== ingredient),
       excluded: current.excluded.filter((name) => name !== ingredient),
       unrecognized: current.unrecognized.filter((name) => name !== ingredient),
@@ -208,12 +240,51 @@ export default function App() {
 
   function addIngredient(ingredient: string) {
     setCriteria((current) => ({
+      ...current,
       included: current.included.includes(ingredient)
         ? current.included
         : [...current.included, ingredient],
       excluded: current.excluded.filter((name) => name !== ingredient),
       unrecognized: current.unrecognized.filter((name) => name !== ingredient),
     }));
+  }
+
+  function toggleCategory(category: string) {
+    setCriteria((current) => ({
+      ...current,
+      excludedCategories: current.excludedCategories.includes(category)
+        ? current.excludedCategories.filter((name) => name !== category)
+        : [...current.excludedCategories, category],
+    }));
+  }
+
+  function toggleVegetarianExclusions() {
+    setCriteria((current) => {
+      const hasPreset = vegetarianExclusions.every((category) =>
+        current.excludedCategories.includes(category),
+      );
+      return {
+        ...current,
+        excludedCategories: hasPreset
+          ? current.excludedCategories.filter(
+              (category) => !vegetarianExclusions.includes(category),
+            )
+          : [
+              ...new Set([
+                ...current.excludedCategories,
+                ...vegetarianExclusions,
+              ]),
+            ],
+      };
+    });
+  }
+
+  function toggleCuisine(cuisine: string) {
+    setSelectedCuisines((current) =>
+      current.includes(cuisine)
+        ? current.filter((name) => name !== cuisine)
+        : [...current, cuisine],
+    );
   }
 
   const availableIngredients = vocabulary.filter(
@@ -279,6 +350,69 @@ export default function App() {
       />
 
       <section className="recipe-search-results" aria-label="Recipe results">
+        <div className="search-filters">
+          <fieldset className="filter-fieldset" disabled={isLoadingVocabulary}>
+            <legend>Exclude ingredient categories</legend>
+            <button
+              type="button"
+              className="vegetarian-preset"
+              aria-pressed={vegetarianExclusions.every((category) =>
+                criteria.excludedCategories.includes(category),
+              )}
+              onClick={toggleVegetarianExclusions}
+            >
+              Vegetarian
+            </button>
+            <div className="category-chip-list" role="group" aria-label="Categories">
+              {filterOptions.categories.map((category) => {
+                const isExcluded = criteria.excludedCategories.includes(category);
+                return (
+                  <button
+                    type="button"
+                    className={isExcluded ? "filter-chip selected" : "filter-chip"}
+                    key={category}
+                    aria-pressed={isExcluded}
+                    onClick={() => toggleCategory(category)}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <fieldset className="filter-fieldset" disabled={isLoadingVocabulary}>
+            <legend>Filter by cuisine</legend>
+            {filterOptions.cuisines.length === 0 ? (
+              <p className="empty-group">No cuisine filters available.</p>
+            ) : (
+              <>
+                <div className="cuisine-options">
+                  {filterOptions.cuisines.map((cuisine) => (
+                    <label key={cuisine}>
+                      <input
+                        type="checkbox"
+                        checked={selectedCuisines.includes(cuisine)}
+                        onChange={() => toggleCuisine(cuisine)}
+                      />
+                      {cuisine}
+                    </label>
+                  ))}
+                </div>
+                {selectedCuisines.length > 0 && (
+                  <button
+                    type="button"
+                    className="clear-cuisines"
+                    onClick={() => setSelectedCuisines([])}
+                  >
+                    Clear cuisine filters
+                  </button>
+                )}
+              </>
+            )}
+          </fieldset>
+        </div>
+
         <div className="time-filter">
           <label htmlFor="max-cooking-time">Maximum cooking time</label>
           <select

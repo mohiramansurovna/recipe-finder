@@ -8,12 +8,20 @@ import type { Driver, Session } from "neo4j-driver";
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_DATA_DIRECTORY = join(PROJECT_ROOT, "data", "prepared");
 const BATCH_SIZE = 1000;
+const SUPPORTED_INGREDIENT_CATEGORIES = new Set([
+  "dairy",
+  "fish/seafood",
+  "meat",
+  "nuts",
+]);
 
 export interface PreparedDataCounts {
   recipes: number;
   ingredients: number;
   uses: number;
   aliases: number;
+  ingredientCategories: number;
+  recipeCuisines: number;
 }
 
 export interface ImportConfig {
@@ -88,7 +96,14 @@ export async function validatePreparedData(
   const recipeIds = new Set<string>();
   const ingredientNames = new Set<string>();
   const aliasNames = new Set<string>();
-  const counts: PreparedDataCounts = { recipes: 0, ingredients: 0, uses: 0, aliases: 0 };
+  const counts: PreparedDataCounts = {
+    recipes: 0,
+    ingredients: 0,
+    uses: 0,
+    aliases: 0,
+    ingredientCategories: 0,
+    recipeCuisines: 0,
+  };
 
   for await (const row of readCsvRows(join(dataDirectory, "recipes.csv"), [
     "id",
@@ -172,6 +187,61 @@ export async function validatePreparedData(
     }
     aliasNames.add(alias);
   }
+
+  const ingredientCategoryKeys = new Set<string>();
+  for await (const row of readCsvRows(
+    join(dataDirectory, "ingredient_categories.csv"),
+    ["ingredientName", "category"],
+  )) {
+    counts.ingredientCategories += 1;
+    const ingredientName = row["ingredientName"];
+    const category = row["category"];
+    if (!isNonEmpty(ingredientName) || !isNonEmpty(category)) {
+      throw new Error(
+        `ingredient_categories.csv row ${counts.ingredientCategories + 1} has an empty ingredient or category.`,
+      );
+    }
+    if (!ingredientNames.has(ingredientName)) {
+      throw new Error(
+        `ingredient_categories.csv row ${counts.ingredientCategories + 1} references an unknown ingredient.`,
+      );
+    }
+    if (!SUPPORTED_INGREDIENT_CATEGORIES.has(category)) {
+      throw new Error(
+        `ingredient_categories.csv row ${counts.ingredientCategories + 1} has an unsupported category.`,
+      );
+    }
+    const key = `${ingredientName}\u0000${category}`;
+    if (ingredientCategoryKeys.has(key)) {
+      throw new Error(`ingredient_categories.csv contains a duplicate category mapping.`);
+    }
+    ingredientCategoryKeys.add(key);
+  }
+
+  const recipeCuisineKeys = new Set<string>();
+  for await (const row of readCsvRows(
+    join(dataDirectory, "recipe_cuisines.csv"),
+    ["recipeId", "cuisineName"],
+  )) {
+    counts.recipeCuisines += 1;
+    const recipeId = row["recipeId"];
+    const cuisineName = row["cuisineName"];
+    if (!isNonEmpty(recipeId) || !isNonEmpty(cuisineName)) {
+      throw new Error(
+        `recipe_cuisines.csv row ${counts.recipeCuisines + 1} has an empty recipe ID or cuisine name.`,
+      );
+    }
+    if (!recipeIds.has(recipeId)) {
+      throw new Error(
+        `recipe_cuisines.csv row ${counts.recipeCuisines + 1} references an unknown recipe.`,
+      );
+    }
+    if (recipeCuisineKeys.has(recipeId + "\u0000" + cuisineName)) {
+      throw new Error(`recipe_cuisines.csv contains a duplicate cuisine mapping.`);
+    }
+    recipeCuisineKeys.add(recipeId + "\u0000" + cuisineName);
+  }
+
   if (counts.recipes === 0 || counts.ingredients === 0) {
     throw new Error("Prepared data must contain at least one recipe and one ingredient.");
   }
@@ -279,6 +349,34 @@ async function* aliasNodeRows(directory: string): AsyncGenerator<{ alias: string
   }
 }
 
+async function* ingredientCategoryRows(
+  directory: string,
+): AsyncGenerator<{ ingredientName: string; category: string }> {
+  for await (const row of readCsvRows(
+    join(directory, "ingredient_categories.csv"),
+    ["ingredientName", "category"],
+  )) {
+    yield {
+      ingredientName: row["ingredientName"] ?? "",
+      category: row["category"] ?? "",
+    };
+  }
+}
+
+async function* recipeCuisineRows(
+  directory: string,
+): AsyncGenerator<{ recipeId: string; cuisineName: string }> {
+  for await (const row of readCsvRows(
+    join(directory, "recipe_cuisines.csv"),
+    ["recipeId", "cuisineName"],
+  )) {
+    yield {
+      recipeId: row["recipeId"] ?? "",
+      cuisineName: row["cuisineName"] ?? "",
+    };
+  }
+}
+
 async function writeRecipeBatch(session: Session, rows: {
   id: string;
   name: string;
@@ -344,6 +442,32 @@ async function writeAliasRelationshipBatch(
   );
 }
 
+async function writeIngredientCategoryBatch(
+  session: Session,
+  rows: { ingredientName: string; category: string }[],
+): Promise<void> {
+  await session.run(
+    `UNWIND $rows AS row
+     MATCH (ingredient:Ingredient {name: row.ingredientName})
+     MERGE (category:IngredientCategory {name: row.category})
+     MERGE (ingredient)-[:IN_CATEGORY]->(category)`,
+    { rows },
+  );
+}
+
+async function writeRecipeCuisineBatch(
+  session: Session,
+  rows: { recipeId: string; cuisineName: string }[],
+): Promise<void> {
+  await session.run(
+    `UNWIND $rows AS row
+     MATCH (recipe:Recipe {id: row.recipeId})
+     MERGE (cuisine:Cuisine {name: row.cuisineName})
+     MERGE (recipe)-[:IN_CUISINE]->(cuisine)`,
+    { rows },
+  );
+}
+
 export async function importPreparedData(
   directory: string,
   config: ImportConfig,
@@ -366,6 +490,12 @@ export async function importPreparedData(
     await session.run(
       "CREATE CONSTRAINT ingredient_name_unique IF NOT EXISTS FOR (ingredient:Ingredient) REQUIRE ingredient.name IS UNIQUE",
     );
+    await session.run(
+      "CREATE CONSTRAINT ingredient_category_name_unique IF NOT EXISTS FOR (category:IngredientCategory) REQUIRE category.name IS UNIQUE",
+    );
+    await session.run(
+      "CREATE CONSTRAINT cuisine_name_unique IF NOT EXISTS FOR (cuisine:Cuisine) REQUIRE cuisine.name IS UNIQUE",
+    );
 
     await runBatched(recipeRows(dataDirectory), (batch) =>
       writeRecipeBatch(session, batch),
@@ -379,6 +509,12 @@ export async function importPreparedData(
     await runBatched(useRows(dataDirectory), (batch) => writeUseBatch(session, batch));
     await runBatched(aliasRows(dataDirectory), (batch) =>
       writeAliasRelationshipBatch(session, batch),
+    );
+    await runBatched(ingredientCategoryRows(dataDirectory), (batch) =>
+      writeIngredientCategoryBatch(session, batch),
+    );
+    await runBatched(recipeCuisineRows(dataDirectory), (batch) =>
+      writeRecipeCuisineBatch(session, batch),
     );
   } finally {
     await Promise.all([session.close(), activeDriver.close()]);
@@ -414,7 +550,7 @@ async function main(args: string[]): Promise<void> {
   }
   const counts = await importPreparedData(dataDirectory, readConfig());
   console.log(
-    `Imported ${counts.recipes} recipes, ${counts.ingredients} ingredients, ${counts.uses} USES relationships, and ${counts.aliases} aliases.`,
+    `Imported ${counts.recipes} recipes, ${counts.ingredients} ingredients, ${counts.uses} USES relationships, ${counts.aliases} aliases, ${counts.ingredientCategories} ingredient categories, and ${counts.recipeCuisines} recipe cuisines.`,
   );
 }
 

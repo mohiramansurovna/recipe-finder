@@ -3,11 +3,13 @@
 ## Nodes
 - Recipe: id (unique), name, minutes (optional when the source value is missing or invalid)
 - Ingredient: name (unique), isStaple (boolean)
+- IngredientCategory: name (unique), one of dairy, nuts, meat, or fish/seafood
 - Cuisine: name (unique)
 - User and Rating: added in release R5 only
 
 ## Relationships
 - (Recipe)-[:USES]->(Ingredient)
+- (Ingredient)-[:IN_CATEGORY]->(IngredientCategory)
 - (Recipe)-[:IN_CUISINE]->(Cuisine)
 - (Ingredient)-[:ALIAS_OF]->(Ingredient)
 - (Ingredient)-[:SUBSTITUTE_FOR]->(Ingredient)
@@ -15,6 +17,7 @@
 ## Constraints
 - Unique Recipe.id
 - Unique Ingredient.name
+- Unique IngredientCategory.name
 - Unique Cuisine.name
 
 ## Rules
@@ -37,9 +40,16 @@
 - `ingredient_aliases.csv` contains `alias` and `canonicalName`; import creates an `Ingredient` node for each alias and an `(alias)-[:ALIAS_OF]->(canonical)` relationship. Alias nodes are not connected to recipes through `USES`.
 - Aliases map directly to canonical ingredient names; self-aliases, conflicting mappings, and chains are invalid.
 
+## Change 006 category and cuisine mappings
+- `data/ingredient-categories.csv` is the curated source with `ingredientName` and `category` columns. Supported categories are `dairy`, `nuts`, `meat`, and `fish/seafood`.
+- Preparation normalizes ingredient names, applies aliases to canonicalize them, and requires every mapped ingredient to exist in the prepared ingredient vocabulary. It emits `ingredient_categories.csv`; import connects each canonical Ingredient to its IngredientCategory.
+- `data/cuisine-tags.csv` is the curated source with `sourceTag` and `cuisineName` columns. Only source tags explicitly present in this mapping become cuisines; other tags are ignored.
+- Preparation emits one `recipe_cuisines.csv` row for each distinct recipe/cuisine match. Import connects Recipe nodes to Cuisine nodes. Recipes without a mapped cuisine remain eligible when no cuisine filter is selected.
+- Category membership is explicit and may be incomplete; an unclassified ingredient is not treated as safe for any dietary or allergen purpose.
+
 ## Which change introduces what
 - 001 data-prep-and-import: Recipe, Ingredient, USES, isStaple
 - 005 aliases-and-typo-tolerance: ALIAS_OF
-- 008 categories-and-filters: Cuisine, IN_CUISINE, ingredient categories
+- 006 categories-and-filters: IngredientCategory, IN_CATEGORY, Cuisine, IN_CUISINE
 - 009 substitutions: SUBSTITUTE_FOR
 - 010 personalization: User, Rating

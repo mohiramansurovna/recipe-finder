@@ -11,6 +11,8 @@ import {
 const criteria = {
   included: ["rice", "chicken"],
   excluded: ["butter"],
+  excludedCategories: ["dairy", "meat"],
+  cuisines: ["Italian", "Mexican"],
   maxMinutes: 30,
 };
 
@@ -44,6 +46,8 @@ describe("recipe search cursors", () => {
       recipeSearchFingerprint({
         ...criteria,
         included: ["chicken", "rice", "rice"],
+        excludedCategories: ["meat", "dairy", "meat"],
+        cuisines: ["Mexican", "Italian", "Italian"],
       }),
     ).toBe(fingerprint);
     expect(decodeRecipeSearchCursor(cursor, fingerprint)).toEqual({
@@ -63,6 +67,27 @@ describe("recipe search cursors", () => {
 
     expect(() =>
       decodeRecipeSearchCursor(cursor, recipeSearchFingerprint({ ...criteria, maxMinutes: 60 })),
+    ).toThrow(InvalidRecipeSearchCursorError);
+  });
+
+  it("rejects a cursor when category or cuisine filters change", () => {
+    const fingerprint = recipeSearchFingerprint(criteria);
+    const cursor = encodeRecipeSearchCursor(
+      { missingCount: 0, matchedCount: 2, excludedCount: 0, id: "recipe-1" },
+      fingerprint,
+    );
+
+    expect(() =>
+      decodeRecipeSearchCursor(
+        cursor,
+        recipeSearchFingerprint({ ...criteria, excludedCategories: ["dairy"] }),
+      ),
+    ).toThrow(InvalidRecipeSearchCursorError);
+    expect(() =>
+      decodeRecipeSearchCursor(
+        cursor,
+        recipeSearchFingerprint({ ...criteria, cuisines: ["Italian"] }),
+      ),
     ).toThrow(InvalidRecipeSearchCursorError);
   });
 

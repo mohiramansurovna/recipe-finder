@@ -3,6 +3,7 @@ import type { IngredientAlias } from "./ingredient-repository.js";
 export interface IngredientParseResult {
   included: string[];
   excluded: string[];
+  excludedCategories: string[];
   unrecognized: string[];
 }
 
@@ -199,6 +200,27 @@ function matchIngredient(
   );
 }
 
+function matchExcludedCategory(
+  words: readonly string[],
+  start: number,
+  supportedCategories: ReadonlySet<string> | readonly string[],
+): string | undefined {
+  const categories = [...new Set(supportedCategories)]
+    .map((category) => ({
+      name: category.trim().toLowerCase(),
+      words: tokenize(category),
+    }))
+    .filter(({ name, words: categoryWords }) => name !== "" && categoryWords.length > 0)
+    .sort((left, right) => right.words.length - left.words.length);
+
+  for (const category of categories) {
+    if (category.words.every((word, offset) => words[start + offset] === word)) {
+      return category.name;
+    }
+  }
+  return undefined;
+}
+
 function setCategory(
   categories: Map<string, "included" | "excluded">,
   ingredient: IngredientPhrase,
@@ -211,10 +233,12 @@ export function parseIngredientText(
   text: string,
   vocabulary: ReadonlySet<string> | readonly string[],
   aliases: readonly IngredientAlias[] = [],
+  supportedCategories: ReadonlySet<string> | readonly string[] = [],
 ): IngredientParseResult {
   const words = tokenize(text);
   const vocabularyIndex = buildVocabularyIndex(vocabulary, aliases);
   const categories = new Map<string, "included" | "excluded">();
+  const excludedCategories = new Set<string>();
   const unrecognized = new Set<string>();
 
   for (let index = 0; index < words.length;) {
@@ -227,6 +251,12 @@ export function parseIngredientText(
       words[index + 2] === "have"
     ) {
       const targetStart = words[index + 3] === "any" ? index + 4 : index + 3;
+      const category = matchExcludedCategory(words, targetStart, supportedCategories);
+      if (category !== undefined) {
+        excludedCategories.add(category);
+        index = targetStart + tokenize(category).length;
+        continue;
+      }
       const ingredient = matchIngredient(words, targetStart, vocabularyIndex);
       if (ingredient) {
         setCategory(categories, ingredient, "excluded");
@@ -240,6 +270,12 @@ export function parseIngredientText(
     }
 
     if (NEGATION_WORDS.has(word)) {
+      const category = matchExcludedCategory(words, index + 1, supportedCategories);
+      if (category !== undefined) {
+        excludedCategories.add(category);
+        index += tokenize(category).length + 1;
+        continue;
+      }
       const ingredient = matchIngredient(words, index + 1, vocabularyIndex);
       if (ingredient) {
         setCategory(categories, ingredient, "excluded");
@@ -280,6 +316,7 @@ export function parseIngredientText(
     excluded: [...categories]
       .filter(([, category]) => category === "excluded")
       .map(([name]) => name),
+    excludedCategories: [...excludedCategories],
     unrecognized: [...unrecognized],
   };
 }
