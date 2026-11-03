@@ -49,7 +49,7 @@ class TestRecipeSearchRepository implements RecipeSearchRepository {
   }
 
   async search(): Promise<RecipeSearchPage> {
-    return { recipes: [], nextCursor: null };
+    return { recipes: [], totalCount: 0, nextCursor: null };
   }
 }
 

@@ -212,6 +212,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: null,
         cursor: null,
       });
+      expect(anyTimePage.totalCount).toBe(seedRecipes.length);
       const rankedIds = anyTimePage.recipes.map((recipe) => recipe.id);
       expect(rankedIds.slice(0, 4)).toEqual([
         `${prefix}-rank-01`,
@@ -233,6 +234,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: 15,
         cursor: null,
       });
+      expect(limitedPage.totalCount).toBe(4);
       const limitedIds = limitedPage.recipes.map((recipe) => recipe.id);
       expect(limitedIds).toContain(`${prefix}-rank-01`);
       expect(limitedIds).not.toContain(`${prefix}-rank-02`);
@@ -250,6 +252,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: null,
         cursor: null,
       });
+      expect(dairyExcluded.totalCount).toBe(seedRecipes.length - 3);
       const dairyExcludedIds = dairyExcluded.recipes.map((recipe) => recipe.id);
       expect(dairyExcludedIds).not.toContain(`${prefix}-rank-02`);
       expect(dairyExcludedIds).not.toContain(`${prefix}-alias-search`);
@@ -263,6 +266,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: null,
         cursor: null,
       });
+      expect(vegetarian.totalCount).toBe(25);
       const vegetarianIds = vegetarian.recipes.map((recipe) => recipe.id);
       expect(vegetarianIds).not.toContain(`${prefix}-rank-01`);
       expect(vegetarianIds).not.toContain(`${prefix}-seafood`);
@@ -277,6 +281,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: null,
         cursor: null,
       });
+      expect(selectedCuisines.totalCount).toBe(3);
       const selectedCuisineIds = new Set(
         selectedCuisines.recipes.map((recipe) => recipe.id),
       );
@@ -296,6 +301,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: null,
         cursor: null,
       });
+      expect(firstBrowsePage.totalCount).toBe(seedRecipes.length);
       expect(firstBrowsePage.recipes.map((recipe) => recipe.id)).toEqual(
         Array.from(
           { length: 20 },
@@ -312,6 +318,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         maxMinutes: null,
         cursor: firstBrowsePage.nextCursor,
       });
+      expect(secondBrowsePage.totalCount).toBe(firstBrowsePage.totalCount);
       expect(secondBrowsePage.recipes.map((recipe) => recipe.id)).toEqual(
         Array.from(
           { length: 6 },
@@ -329,6 +336,16 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
           ),
       );
       expect(secondBrowsePage.nextCursor).toBeNull();
+
+      const emptyPage = await repository.search({
+        included: [],
+        excluded: [],
+        excludedCategories: [],
+        cuisines: [],
+        maxMinutes: 0,
+        cursor: null,
+      });
+      expect(emptyPage).toEqual({ recipes: [], totalCount: 0, nextCursor: null });
     } finally {
       if (dataSeeded) {
         const cleanupSession = driver.session({ database });

@@ -28,7 +28,11 @@ class TestRecipeSearchRepository implements RecipeSearchRepository {
   readonly requests: RecipeSearchCriteria[] = [];
 
   constructor(
-    private readonly page: RecipeSearchPage = { recipes: [], nextCursor: null },
+    private readonly page: RecipeSearchPage = {
+      recipes: [],
+      totalCount: 0,
+      nextCursor: null,
+    },
     private readonly failure?: Error,
   ) {}
 
@@ -65,6 +69,7 @@ describe("recipe search API", () => {
           excludedIngredients: [],
         },
       ],
+      totalCount: 1,
       nextCursor: "next-page",
     };
     const repository = new TestRecipeSearchRepository(page);
@@ -146,7 +151,7 @@ describe("recipe search API", () => {
   });
   it("returns a client error for an invalid or mismatched cursor", async () => {
     const repository = new TestRecipeSearchRepository(
-      { recipes: [], nextCursor: null },
+      { recipes: [], totalCount: 0, nextCursor: null },
       new InvalidRecipeSearchCursorError(),
     );
     const app = createApiApp(new TestIngredientRepository(), 100, repository);

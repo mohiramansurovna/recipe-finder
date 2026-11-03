@@ -27,6 +27,7 @@ const recipeSearchPageSchema = z.object({
       excludedIngredients: z.array(z.string()),
     }),
   ),
+  totalCount: z.number().int().nonnegative(),
   nextCursor: z.string().nullable(),
 });
 

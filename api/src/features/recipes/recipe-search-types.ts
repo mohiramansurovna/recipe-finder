@@ -25,6 +25,7 @@ export interface RecipeSearchResult {
 
 export interface RecipeSearchPage {
   recipes: RecipeSearchResult[];
+  totalCount: number;
   nextCursor: string | null;
 }
 

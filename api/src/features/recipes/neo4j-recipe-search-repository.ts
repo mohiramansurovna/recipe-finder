@@ -19,19 +19,8 @@ import {
 
 const PAGE_SIZE = 20;
 
-interface ScoredRecipeSearchRecord {
-  recipe: RecipeSearchRecord;
-  position: {
-    missingCount: number;
-    matchedCount: number;
-    excludedCount: number;
-    id: string;
-  };
-}
-
-const SEARCH_QUERY = `
-MATCH (recipe:Recipe)
-WHERE ($maxMinutes IS NULL OR recipe.minutes <= $maxMinutes)
+const ELIGIBILITY_FILTERS = `
+  ($maxMinutes IS NULL OR recipe.minutes <= $maxMinutes)
   AND NOT EXISTS {
     MATCH (recipe)-[:USES]->(:Ingredient)-[:IN_CATEGORY]->(category:IngredientCategory)
     WHERE category.name IN $excludedCategories
@@ -43,6 +32,27 @@ WHERE ($maxMinutes IS NULL OR recipe.minutes <= $maxMinutes)
       WHERE cuisine.name IN $cuisines
     }
   )
+`;
+
+interface ScoredRecipeSearchRecord {
+  recipe: RecipeSearchRecord;
+  position: {
+    missingCount: number;
+    matchedCount: number;
+    excludedCount: number;
+    id: string;
+  };
+}
+
+const COUNT_QUERY = `
+MATCH (recipe:Recipe)
+WHERE ${ELIGIBILITY_FILTERS}
+RETURN count(recipe) AS totalCount
+`;
+
+const SEARCH_QUERY = `
+MATCH (recipe:Recipe)
+WHERE ${ELIGIBILITY_FILTERS}
 OPTIONAL MATCH (recipe)-[:USES]->(ingredient:Ingredient)
 WITH recipe, collect(DISTINCT ingredient.name) AS ingredientNames
 WITH recipe, ingredientNames,
@@ -90,6 +100,15 @@ function readIngredientNames(value: unknown): string[] {
   return value;
 }
 
+function readTotalCount(record: Neo4jRecord | undefined): number {
+  const value: unknown = record?.get("totalCount");
+  const count = neo4j.isInt(value) ? value.toNumber() : value;
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) {
+    throw new Error("Neo4j returned an invalid recipe-search total count.");
+  }
+  return count;
+}
+
 export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
   constructor(
     private readonly driver: Driver,
@@ -119,12 +138,17 @@ export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
     const session = this.driver.session({ database: this.database });
 
     try {
-      const result = await session.run(SEARCH_QUERY, {
-        included: [...new Set(criteria.included)],
-        excluded: [...new Set(criteria.excluded)],
+      const filterParams = {
         excludedCategories: [...new Set(criteria.excludedCategories)],
         cuisines: [...new Set(criteria.cuisines)],
         maxMinutes: criteria.maxMinutes,
+      };
+      const countResult = await session.run(COUNT_QUERY, filterParams);
+      const totalCount = readTotalCount(countResult.records[0]);
+      const result = await session.run(SEARCH_QUERY, {
+        included: [...new Set(criteria.included)],
+        excluded: [...new Set(criteria.excluded)],
+        ...filterParams,
         cursorMissing: position?.missingCount ?? null,
         cursorMatched: position?.matchedCount ?? null,
         cursorExcluded: position?.excludedCount ?? null,
@@ -172,6 +196,7 @@ export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
 
       return {
         recipes: pageRecords.map(({ recipe }) => mapRecipeSearchResult(recipe, criteria)),
+        totalCount,
         nextCursor,
       };
     } finally {

@@ -85,6 +85,7 @@ describe("ingredient criteria interface", () => {
               excludedIngredients: ["butter"],
             },
           ],
+          totalCount: 1,
           nextCursor: null,
         }),
       );
@@ -142,6 +143,7 @@ describe("ingredient criteria interface", () => {
               excludedIngredients: ["butter"],
             },
           ],
+          totalCount: 42,
           nextCursor: null,
         }),
       );
@@ -168,6 +170,7 @@ describe("ingredient criteria interface", () => {
       "dragonfruit",
     );
     expect(await screen.findByRole("heading", { name: "Chicken and rice" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "42 recipes found" })).toBeVisible();
     expect(screen.getByText("25 minutes")).toBeVisible();
     expect(screen.getByText("Matched ingredients").parentElement).toHaveTextContent(
       "chicken",
@@ -226,6 +229,7 @@ describe("ingredient criteria interface", () => {
               excludedIngredients: [],
             },
           ],
+          totalCount: 1,
           nextCursor: null,
         }),
       );
@@ -244,6 +248,49 @@ describe("ingredient criteria interface", () => {
     expect(screen.getByRole("combobox", { name: "Maximum cooking time" })).toHaveValue("");
   });
 
+  it("switches themes by keyboard and keeps error states inside the selected theme", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ ingredients: ["chicken"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          included: ["chicken"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ error: { message: "Search is unavailable." } }, 503),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    const app = screen.getByRole("main").parentElement;
+    const themeToggle = screen.getByRole("button", { name: "Switch to dark theme" });
+    expect(app).toHaveAttribute("data-theme", "light");
+
+    themeToggle.focus();
+    await user.keyboard("{Enter}");
+    expect(app).toHaveAttribute("data-theme", "dark");
+    expect(themeToggle).toHaveAccessibleName("Switch to light theme");
+    expect(themeToggle).toHaveAttribute("aria-pressed", "true");
+
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "chicken");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    const searchError = await screen.findByRole("alert");
+    expect(searchError).toHaveClass("error-message");
+    expect(app).toHaveAttribute("data-theme", "dark");
+
+    themeToggle.focus();
+    await user.keyboard("{Enter}");
+    expect(app).toHaveAttribute("data-theme", "light");
+    expect(searchError).toBeVisible();
+  });
+
   it("communicates when a completed search has no matching recipes", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -257,7 +304,9 @@ describe("ingredient criteria interface", () => {
           unrecognized: [],
         }),
       )
-      .mockResolvedValueOnce(jsonResponse({ recipes: [], nextCursor: null }));
+      .mockResolvedValueOnce(
+        jsonResponse({ recipes: [], totalCount: 0, nextCursor: null }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -270,6 +319,7 @@ describe("ingredient criteria interface", () => {
       "role",
       "status",
     );
+    expect(screen.getByRole("heading", { name: "0 recipes found" })).toBeVisible();
   });
 
   it("loads the next cursor page and avoids duplicate recipe cards", async () => {
@@ -294,7 +344,11 @@ describe("ingredient criteria interface", () => {
         }),
       )
       .mockResolvedValueOnce(
-        jsonResponse({ recipes: [chickenRecipe], nextCursor: "cursor-page-two" }),
+        jsonResponse({
+          recipes: [chickenRecipe],
+          totalCount: 2,
+          nextCursor: "cursor-page-two",
+        }),
       )
       .mockResolvedValueOnce(
         jsonResponse({
@@ -309,6 +363,7 @@ describe("ingredient criteria interface", () => {
               excludedIngredients: [],
             },
           ],
+          totalCount: 2,
           nextCursor: null,
         }),
       );
@@ -324,6 +379,7 @@ describe("ingredient criteria interface", () => {
     await user.click(screen.getByRole("button", { name: "Load more recipes" }));
     expect(await screen.findByRole("heading", { name: "Chicken salad" })).toBeVisible();
     expect(screen.getAllByRole("heading", { name: "Chicken soup" })).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "2 recipes found" })).toBeVisible();
     const searchCalls = fetchMock.mock.calls.filter(
       ([url]) => url === "/api/recipes/search",
     );
@@ -364,6 +420,7 @@ describe("ingredient criteria interface", () => {
               excludedIngredients: [],
             },
           ],
+          totalCount: 2,
           nextCursor: "auto-next",
         }),
       )
@@ -379,6 +436,7 @@ describe("ingredient criteria interface", () => {
               excludedIngredients: [],
             },
           ],
+          totalCount: 2,
           nextCursor: null,
         }),
       );
@@ -434,6 +492,7 @@ describe("ingredient criteria interface", () => {
             excludedIngredients: [],
           },
         ],
+        totalCount: 1,
         nextCursor: null,
       });
     });
@@ -487,6 +546,7 @@ describe("ingredient criteria interface", () => {
             excludedIngredients: [],
           },
         ],
+        totalCount: 1,
         nextCursor: null,
       }),
     );
@@ -525,6 +585,7 @@ describe("ingredient criteria interface", () => {
             excludedIngredients: [],
           },
         ],
+        totalCount: 1,
         nextCursor: null,
       });
     });
@@ -589,6 +650,7 @@ describe("ingredient criteria interface", () => {
             excludedIngredients: [],
           },
         ],
+        totalCount: 3,
         nextCursor: `cursor-${searchCount}`,
       });
     });
