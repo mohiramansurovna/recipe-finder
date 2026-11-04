@@ -36,7 +36,8 @@ The recipe data lives in a graph database (Neo4j) that we run ourselves. There a
 - R2 Better matching. Aliases (scallion and green onion), typo tolerance, staples such as salt and oil not counted as missing, rarity weighting, minimum match threshold.
 - R3 Demo deployment. One Terraform stack on AWS (EC2, security group, Elastic IP, key pair), CI that builds public images to GHCR, automatic HTTPS, demo-up and demo-down scripts, and a destroy checklist. The first demo-ready point.
 - R4 Filters and substitutions. Ingredient categories (dairy, nuts, meat) for exclusions like "no dairy" and vegetarian, cuisine filter, and substitution suggestions.
-- R5 Personalization. Simple user identity, cooked and rated recipes, dislikes, personalized ranking, and collaborative filtering.
+- R5 Recipe details and ratings. Show full recipe details and reviews. Do not add accounts or logins. Do not allow users to send reviews.
+- R6 Clean architecture. Refactor the codebase into a modular structure with clear boundaries between data, API and UI.
 
 ## 6. Feature specs map
 This is a greenfield project. Each item below is one OpenSpec change, built strictly in order. Each is a vertical slice (data, API and UI where relevant). A change is archived before the next one starts, so the specs in openspec/specs/ build up as the system grows.
@@ -49,10 +50,8 @@ This is a greenfield project. Each item below is one OpenSpec change, built stri
 - 006 categories-and-filters (R4)
 - 007 ui-design-implementation (R2)
 - 008 demo-deployment (R3)
-- 009 substitutions (R4)
-- 010 personalization (R5)
-
-OpenSpec is used for all ten features. No other spec-driven tool is used.
+- 009 recipe-detail-and-reviews (R5)
+- 010 modular-structure-refactor (R6)
 
 Scope of 008 demo-deployment: the Terraform stack, the server bootstrap (user data), the GHCR image build workflow, the Caddy HTTPS configuration, the demo-up script (apply, copy CSVs, import, start) and the demo-down script (destroy), and the destroy checklist.
 
