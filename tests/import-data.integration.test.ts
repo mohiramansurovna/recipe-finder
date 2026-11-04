@@ -41,6 +41,7 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
         recipes: 2,
         ingredients: 3,
         uses: 3,
+        ratings: 1,
         aliases: 1,
         ingredientCategories: 1,
         recipeCuisines: 2,
@@ -116,9 +117,30 @@ describe.skipIf(testConfig === undefined)("Neo4j importer integration", () => {
         await expect(ingredientRepository.getIngredientCategories()).resolves.toEqual([
           "meat",
         ]);
-        await expect(
-          new Neo4jRecipeSearchRepository(driver, testConfig.database).getCuisineNames(),
-        ).resolves.toEqual(["Italian", "Mexican"]);
+        const recipeRepository = new Neo4jRecipeSearchRepository(
+          driver,
+          testConfig.database,
+        );
+        await expect(recipeRepository.getCuisineNames()).resolves.toEqual([
+          "Italian",
+          "Mexican",
+        ]);
+        await expect(recipeRepository.getRecipeDetail("1")).resolves.toEqual({
+          id: "1",
+          name: "Soup",
+          minutes: 10,
+          instructions: ["Simmer.", "Serve."],
+          ingredients: ["salt"],
+          cuisines: ["Italian"],
+          ratings: { individual: [5], aggregate: null },
+        });
+        await expect(recipeRepository.getRecipeDetail("2")).resolves.toMatchObject({
+          id: "2",
+          minutes: null,
+          instructions: null,
+          ratings: { individual: [], aggregate: null },
+        });
+        await expect(recipeRepository.getRecipeDetail("unknown")).resolves.toBeNull();
       } finally {
         await session.close();
       }

@@ -1,6 +1,6 @@
 # Data Preparation
 
-The preparation pipeline consumes the pinned Kaggle version 2 archive and writes graph-ready CSVs locally. It uses only `RAW_recipes.csv`; interaction and preprocessed files are not used.
+The preparation pipeline consumes the pinned Kaggle version 2 archive and writes graph-ready CSVs locally. It reads `RAW_recipes.csv` and, when present, `RAW_interactions.csv`; it does not use preprocessed files.
 
 ## Run
 
@@ -18,13 +18,14 @@ To validate the pipeline with the small synthetic fixture instead of the full da
 npm run prepare:data -- --input tests/fixtures/RAW_recipes.csv --output /tmp/recipe-graph-prepared
 ```
 
-The command accepts `--input` and `--output`; the defaults are `data/raw/RAW_recipes.csv` and `data/prepared/`. It also reads the curated `data/ingredient-aliases.csv`, `data/ingredient-categories.csv`, and `data/cuisine-tags.csv` mappings. The command streams source records and writes outputs only after processing has completed. Missing or duplicate recipe IDs, malformed ingredient or tag lists, invalid mapping data, and category mappings for ingredients absent from the prepared vocabulary stop preparation with an explicit error. Recipes with an ID but no usable name are excluded and listed in `invalid_recipes.csv`.
+The command accepts `--input`, `--interactions`, and `--output`; the defaults are `data/raw/RAW_recipes.csv`, the optional `data/raw/RAW_interactions.csv`, and `data/prepared/`. An explicitly supplied interactions file must exist and contain `recipe_id` and `rating` columns. It also reads the curated `data/ingredient-aliases.csv`, `data/ingredient-categories.csv`, and `data/cuisine-tags.csv` mappings. The command streams source records and writes outputs only after processing has completed. Missing or duplicate recipe IDs, malformed ingredient, instruction, or tag lists, invalid ratings or mapping data, and category mappings for ingredients absent from the prepared vocabulary stop preparation with an explicit error. Recipes with an ID but no usable name are excluded and listed in `invalid_recipes.csv`.
 
 ## Output contract
 
 | File | Columns | Meaning |
 |---|---|---|
-| `recipes.csv` | `id,name,minutes` | Recipe graph nodes; blank `minutes` represents a missing property |
+| `recipes.csv` | `id,name,minutes,instructions,aggregateRating` | Recipe graph nodes; blank optional fields represent missing properties; instructions are JSON arrays |
+| `ratings.csv` | `recipeId,rating` | Individual source rating values; zero ratings and records for excluded recipes are omitted |
 | `ingredients.csv` | `name,isStaple` | Unique mechanically normalized ingredient names and explicit staple flags |
 | `recipe_ingredients.csv` | `recipeId,ingredientName` | One USES edge per recipe and distinct normalized ingredient |
 | `ingredient_categories.csv` | `ingredientName,category` | Curated category membership for canonical ingredients |
@@ -34,7 +35,7 @@ The command accepts `--input` and `--output`; the defaults are `data/raw/RAW_rec
 | `invalid_recipes.csv` | `recipeId,sourceRecord,reason` | Excluded rows that cannot satisfy the graph's required recipe name |
 | `summary.json` | counts and threshold | Processing totals without source contributor fields |
 
-Only fields required by the graph are written. Contributor identity fields, raw tags, recipe instructions, and other source metadata are not copied to prepared output. Tags are parsed as data and only tags listed in `data/cuisine-tags.csv` contribute canonical cuisine rows. Ingredient category mappings in `data/ingredient-categories.csv` are explicit, not inferred; names are normalized and aliases are resolved before mapped ingredients are checked against the prepared vocabulary. Unmapped ingredients remain unclassified. Ingredient-list and tag values are parsed as data; they are never evaluated as code. Normalization lowercases names and strips surrounding whitespace and punctuation without merging semantic variants. The explicit initial staple set is `salt`, `oil`, `olive oil`, `vegetable oil`, and `canola oil`.
+Only fields required by the graph are written. Contributor and rater identity fields, review text, raw tags, and other source metadata are not copied to prepared output. Source `steps` are stored as recipe instructions when present. Source aggregate ratings are retained only when present and valid; individual interactions preserve only recipe ID and rating value. A zero interaction rating is treated as unrated and omitted. At display time individual values take precedence over a source aggregate. Tags are parsed as data and only tags listed in `data/cuisine-tags.csv` contribute canonical cuisine rows. Ingredient category mappings in `data/ingredient-categories.csv` are explicit, not inferred; names are normalized and aliases are resolved before mapped ingredients are checked against the prepared vocabulary. Unmapped ingredients remain unclassified. Ingredient, instruction, and tag values are parsed as data; they are never evaluated as code. Normalization lowercases names and strips surrounding whitespace and punctuation without merging semantic variants. The explicit initial staple set is `salt`, `oil`, `olive oil`, `vegetable oil`, and `canola oil`.
 
 ## Cooking-time report rule
 

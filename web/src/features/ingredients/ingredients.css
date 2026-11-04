@@ -262,6 +262,34 @@
   background: var(--surface);
 }
 
+.recipe-detail {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.recipe-detail header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.recipe-detail h2,
+.recipe-detail h3,
+.recipe-detail p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.recipe-detail li {
+  margin-top: 0.5rem;
+}
+
 .recipe-card h2,
 .recipe-card h3,
 .recipe-card p {

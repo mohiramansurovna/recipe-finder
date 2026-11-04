@@ -7,10 +7,12 @@ import {
 } from "react";
 
 import {
+  fetchRecipeDetail,
   fetchFilterOptions,
   fetchIngredientVocabulary,
   parseIngredients,
   searchRecipes,
+  type RecipeDetail,
   type RecipeSearchPage,
 } from "../features/ingredients/api.js";
 import { IngredientAutocomplete } from "../features/ingredients/components/IngredientAutocomplete.js";
@@ -49,6 +51,10 @@ export default function App() {
     totalCount: 0,
     nextCursor: null,
   });
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [recipeDetail, setRecipeDetail] = useState<RecipeDetail | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [pageCriteriaKey, setPageCriteriaKey] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -63,6 +69,40 @@ export default function App() {
     selectedCuisines,
     maxMinutes,
   ]);
+
+  useEffect(() => {
+    if (selectedRecipeId === null) {
+      setRecipeDetail(null);
+      setIsLoadingDetail(false);
+      setDetailError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setRecipeDetail(null);
+    setIsLoadingDetail(true);
+    setDetailError("");
+    fetchRecipeDetail(selectedRecipeId, controller.signal)
+      .then((detail) => {
+        if (!controller.signal.aborted && detail.id === selectedRecipeId) {
+          setRecipeDetail(detail);
+        } else if (!controller.signal.aborted) {
+          setDetailError("The requested recipe details could not be verified.");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setDetailError(
+            error instanceof Error ? error.message : "Could not load recipe details.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingDetail(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedRecipeId]);
 
   useEffect(() => {
     let active = true;
@@ -508,9 +548,92 @@ export default function App() {
                     <p>{recipe.excludedIngredients.join(", ")}</p>
                   </div>
                 )}
+                <button
+                  type="button"
+                  aria-label={`View details for ${recipe.name}`}
+                  onClick={() => setSelectedRecipeId(recipe.id)}
+                >
+                  View details
+                </button>
               </article>
             ))}
           </div>
+          {selectedRecipeId !== null && (
+            <section
+              className="recipe-detail"
+              aria-labelledby="recipe-detail-heading"
+              aria-busy={isLoadingDetail}
+            >
+              <header>
+                <h2 id="recipe-detail-heading">
+                  {recipeDetail?.name ?? "Recipe details"}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecipeId(null)}
+                >
+                  Close details
+                </button>
+              </header>
+              {isLoadingDetail && (
+                <p className="search-note" role="status">
+                  Loading recipe details…
+                </p>
+              )}
+              {detailError && (
+                <p className="error-message" role="alert">
+                  {detailError}
+                </p>
+              )}
+              {recipeDetail !== null && (
+                <>
+                  {recipeDetail.minutes !== null && (
+                    <p className="recipe-time">{recipeDetail.minutes} minutes</p>
+                  )}
+                  {recipeDetail.ingredients.length > 0 && (
+                    <div>
+                      <h3>Ingredients</h3>
+                      <p>{recipeDetail.ingredients.join(", ")}</p>
+                    </div>
+                  )}
+                  {recipeDetail.cuisines.length > 0 && (
+                    <div>
+                      <h3>Cuisine</h3>
+                      <p>{recipeDetail.cuisines.join(", ")}</p>
+                    </div>
+                  )}
+                  {recipeDetail.instructions !== null &&
+                    recipeDetail.instructions.length > 0 && (
+                      <div>
+                        <h3>Instructions</h3>
+                        <ol>
+                          {recipeDetail.instructions.map((instruction, index) => (
+                            <li key={`${index}-${instruction}`}>{instruction}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  {recipeDetail.ratings.individual.length > 0 ? (
+                    <div>
+                      <h3>Ratings</h3>
+                      <ul>
+                        {recipeDetail.ratings.individual.map((rating, index) => (
+                          <li key={`${rating}-${index}`}>{rating} out of 5</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : recipeDetail.ratings.aggregate !== null ? (
+                    <div>
+                      <h3>Rating</h3>
+                      <p>Average rating: {recipeDetail.ratings.aggregate} out of 5</p>
+                    </div>
+                  ) : (
+                    <p>No ratings yet.</p>
+                  )}
+                </>
+              )}
+            </section>
+          )}
           {recipePage.nextCursor !== null && pageCriteriaKey === criteriaKey && (
             <>
               <button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>

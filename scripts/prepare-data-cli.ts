@@ -1,4 +1,4 @@
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -22,6 +22,7 @@ import {
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_INPUT = join(PROJECT_ROOT, "data", "raw", "RAW_recipes.csv");
+const DEFAULT_INTERACTIONS = join(PROJECT_ROOT, "data", "raw", "RAW_interactions.csv");
 const DEFAULT_OUTPUT = join(PROJECT_ROOT, "data", "prepared");
 const DEFAULT_ALIAS_SOURCE = join(PROJECT_ROOT, "data", "ingredient-aliases.csv");
 const DEFAULT_CATEGORY_SOURCE = join(PROJECT_ROOT, "data", "ingredient-categories.csv");
@@ -35,6 +36,7 @@ const SUPPORTED_INGREDIENT_CATEGORIES = new Set([
 ]);
 const OUTPUT_FILES = [
   "recipes.csv",
+  "ratings.csv",
   "ingredients.csv",
   "recipe_ingredients.csv",
   "ingredient_aliases.csv",
@@ -54,6 +56,7 @@ interface PreparationSummary {
   uses: number;
   ingredientCategories: number;
   recipeCuisines: number;
+  ratings: number;
   missingCookingTimes: number;
   invalidCookingTimes: number;
   cookingTimeOutliers: number;
@@ -225,9 +228,15 @@ export async function prepareDataset(
   aliasSourcePath: string = DEFAULT_ALIAS_SOURCE,
   categorySourcePath: string = DEFAULT_CATEGORY_SOURCE,
   cuisineSourcePath: string = DEFAULT_CUISINE_SOURCE,
+  interactionsPath?: string,
 ): Promise<PreparationSummary> {
   const input = resolve(inputPath);
   const output = resolve(outputPath);
+  const interactions = resolve(interactionsPath ?? DEFAULT_INTERACTIONS);
+  if (interactionsPath !== undefined && !existsSync(interactions)) {
+    throw new Error(`Rating source file ${interactions} does not exist.`);
+  }
+  const hasInteractions = existsSync(interactions);
   const aliasSource = resolve(aliasSourcePath);
   const aliases = await loadIngredientAliases(aliasSource);
   const ingredientCategories = await loadIngredientCategories(resolve(categorySourcePath));
@@ -235,6 +244,7 @@ export async function prepareDataset(
   const temporaryDirectory = await mkdtemp(join(dirname(output), ".recipe-prep-"));
   const outputStreams = {
     recipes: createWriteStream(join(temporaryDirectory, "recipes.csv")),
+    ratings: createWriteStream(join(temporaryDirectory, "ratings.csv")),
     ingredients: createWriteStream(join(temporaryDirectory, "ingredients.csv")),
     uses: createWriteStream(join(temporaryDirectory, "recipe_ingredients.csv")),
     aliases: createWriteStream(join(temporaryDirectory, "ingredient_aliases.csv")),
@@ -259,6 +269,7 @@ export async function prepareDataset(
     uses: 0,
     ingredientCategories: 0,
     recipeCuisines: 0,
+    ratings: 0,
     missingCookingTimes: 0,
     invalidCookingTimes: 0,
     cookingTimeOutliers: 0,
@@ -266,11 +277,19 @@ export async function prepareDataset(
   };
   const ingredientStaples = new Map<string, boolean>();
   const recipeIds = new Set<string>();
+  const preparedRecipeIds = new Set<string>();
   const recipeCuisines = new Map<string, Set<string>>();
 
   try {
     await Promise.all([
-      writeCsvRow(outputStreams.recipes, ["id", "name", "minutes"]),
+      writeCsvRow(outputStreams.recipes, [
+        "id",
+        "name",
+        "minutes",
+        "instructions",
+        "aggregateRating",
+      ]),
+      writeCsvRow(outputStreams.ratings, ["recipeId", "rating"]),
       writeCsvRow(outputStreams.ingredients, ["name", "isStaple"]),
       writeCsvRow(outputStreams.uses, ["recipeId", "ingredientName"]),
       writeCsvRow(outputStreams.aliases, ["alias", "canonicalName"]),
@@ -337,10 +356,15 @@ export async function prepareDataset(
       }
 
       summary.recipes += 1;
+      preparedRecipeIds.add(prepared.recipe.id);
       await writeCsvRow(outputStreams.recipes, [
         prepared.recipe.id,
         prepared.recipe.name,
         prepared.recipe.minutes,
+        prepared.recipe.instructions === null
+          ? null
+          : JSON.stringify(prepared.recipe.instructions),
+        prepared.recipe.aggregateRating,
       ]);
 
       const recipeCuisineNames = new Set<string>();
@@ -388,6 +412,53 @@ export async function prepareDataset(
       }
 
       if (outputError !== null) throw outputError;
+    }
+
+    if (hasInteractions) {
+      let headersValidated = false;
+      const parser = parse({
+        bom: true,
+        columns: (headers: string[]) => {
+          const requiredColumns = ["recipe_id", "rating"];
+          const missing = requiredColumns.filter((column) => !headers.includes(column));
+          if (missing.length > 0) {
+            throw new Error(
+              `${interactions} is missing required columns: ${missing.join(", ")}.`,
+            );
+          }
+          headersValidated = true;
+          return headers;
+        },
+        skip_empty_lines: true,
+      });
+      const inputStream = createReadStream(interactions);
+      inputStream.on("error", (error: Error) => parser.destroy(error));
+      inputStream.pipe(parser);
+
+      for await (const sourceRow of parser) {
+        const row = sourceRow as Record<string, string>;
+        const recipeId = (row["recipe_id"] ?? "").trim();
+        const ratingValue = (row["rating"] ?? "").trim();
+        if (recipeId === "") {
+          throw new Error(`${interactions} contains a rating without a recipe ID.`);
+        }
+        if (!recipeIds.has(recipeId)) {
+          throw new Error(`${interactions} references unknown recipe ${recipeId}.`);
+        }
+        if (!/^\d+$/u.test(ratingValue)) {
+          throw new Error(`${interactions} contains an invalid rating for recipe ${recipeId}.`);
+        }
+        const rating = Number(ratingValue);
+        if (!Number.isSafeInteger(rating) || rating < 0 || rating > 5) {
+          throw new Error(`${interactions} contains an invalid rating for recipe ${recipeId}.`);
+        }
+        if (rating === 0 || !preparedRecipeIds.has(recipeId)) continue;
+        summary.ratings += 1;
+        await writeCsvRow(outputStreams.ratings, [recipeId, rating]);
+      }
+      if (!headersValidated) {
+        throw new Error(`${interactions} is empty or missing its header row.`);
+      }
     }
 
     for (const [name, isStaple] of [...ingredientStaples.entries()].sort(([a], [b]) =>
@@ -458,9 +529,14 @@ export async function prepareDataset(
   }
 }
 
-function parseArguments(args: string[]): { input: string; output: string } {
+function parseArguments(args: string[]): {
+  input: string;
+  output: string;
+  interactions?: string;
+} {
   let input = DEFAULT_INPUT;
   let output = DEFAULT_OUTPUT;
+  let interactions: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--input" && args[index + 1] !== undefined) {
@@ -469,23 +545,37 @@ function parseArguments(args: string[]): { input: string; output: string } {
     } else if (argument === "--output" && args[index + 1] !== undefined) {
       output = args[index + 1] ?? output;
       index += 1;
+    } else if (argument === "--interactions" && args[index + 1] !== undefined) {
+      interactions = args[index + 1];
+      index += 1;
     } else if (argument === "--help") {
       console.log(
-        "Usage: npm run prepare:data -- [--input RAW_recipes.csv] [--output data/prepared]",
+        "Usage: npm run prepare:data -- [--input RAW_recipes.csv] [--interactions RAW_interactions.csv] [--output data/prepared]",
       );
       return { input: "", output: "" };
     } else {
       throw new Error(`Unknown or incomplete argument: ${argument ?? ""}`);
     }
   }
-  return { input, output };
+  return interactions === undefined
+    ? { input, output }
+    : { input, output, interactions };
 }
 
 async function main(args: string[]): Promise<void> {
   const options = parseArguments(args);
   if (options.input === "" && options.output === "") return;
-  const summary = await prepareDataset(options.input, options.output);
-  console.log(`Prepared ${summary.recipes} recipes and ${summary.ingredients} ingredients.`);
+  const summary = await prepareDataset(
+    options.input,
+    options.output,
+    undefined,
+    undefined,
+    undefined,
+    options.interactions,
+  );
+  console.log(
+    `Prepared ${summary.recipes} recipes, ${summary.ingredients} ingredients, and ${summary.ratings} individual ratings.`,
+  );
   console.log(`Wrote graph CSVs and reports to ${resolve(options.output)}.`);
 }
 

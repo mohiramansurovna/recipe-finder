@@ -53,7 +53,13 @@ describe("recipe row preparation", () => {
     });
 
     expect(prepared).toEqual({
-      recipe: { id: "42", name: "A recipe", minutes: 30 },
+      recipe: {
+        id: "42",
+        name: "A recipe",
+        minutes: 30,
+        instructions: null,
+        aggregateRating: null,
+      },
       ingredients: [
         { name: "chicken", isStaple: false },
         { name: "olive oil", isStaple: true },
@@ -96,9 +102,53 @@ describe("recipe row preparation", () => {
       minutes: "133",
       ingredients: "['oil']",
     });
-
     expect(prepared.recipe.minutes).toBe(133);
     expect(prepared.isCookingTimeOutlier).toBe(true);
+  });
+
+  it("prepares available instructions and aggregate ratings without inventing missing values", () => {
+    const prepared = prepareRecipeRow({
+      id: "45",
+      name: "A recipe",
+      minutes: "10",
+      ingredients: "['salt']",
+      steps: "['Boil water.', 'Add salt.']",
+      rating: "4.5",
+    });
+    expect(prepared.recipe.instructions).toEqual(["Boil water.", "Add salt."]);
+    expect(prepared.recipe.aggregateRating).toBe(4.5);
+
+    const missing = prepareRecipeRow({
+      id: "46",
+      name: "No details",
+      minutes: "",
+      ingredients: "[]",
+      steps: "[]",
+      rating: "0",
+    });
+    expect(missing.recipe.instructions).toBeNull();
+    expect(missing.recipe.aggregateRating).toBeNull();
+  });
+
+  it("rejects malformed source instructions and aggregate ratings", () => {
+    expect(() =>
+      prepareRecipeRow({
+        id: "47",
+        name: "Bad instructions",
+        minutes: "10",
+        ingredients: "[]",
+        steps: "[3]",
+      }),
+    ).toThrow("quoted strings");
+    expect(() =>
+      prepareRecipeRow({
+        id: "48",
+        name: "Bad rating",
+        minutes: "10",
+        ingredients: "[]",
+        rating: "6",
+      }),
+    ).toThrow("invalid aggregate rating");
   });
 
   it("rejects rows without required graph identity or ingredient data", () => {

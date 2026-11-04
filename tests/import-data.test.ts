@@ -22,7 +22,11 @@ async function makePreparedDirectory(): Promise<string> {
   const dataDirectory = join(temporaryDirectory, "prepared");
   await mkdir(dataDirectory);
   await Promise.all([
-    writeFile(join(dataDirectory, "recipes.csv"), "id,name,minutes\n1,Soup,10\n"),
+    writeFile(
+      join(dataDirectory, "recipes.csv"),
+      'id,name,minutes,instructions,aggregateRating\n1,Soup,10,"[""Simmer.""]",4.5\n',
+    ),
+    writeFile(join(dataDirectory, "ratings.csv"), "recipeId,rating\n1,5\n"),
     writeFile(join(dataDirectory, "ingredients.csv"), "name,isStaple\nsalt,true\n"),
     writeFile(
       join(dataDirectory, "recipe_ingredients.csv"),
@@ -65,6 +69,7 @@ describe("prepared data validation", () => {
       recipes: 1,
       ingredients: 1,
       uses: 1,
+      ratings: 1,
       aliases: 1,
       ingredientCategories: 1,
       recipeCuisines: 1,
@@ -86,10 +91,56 @@ describe("prepared data validation", () => {
     const dataDirectory = await makePreparedDirectory();
     await writeFile(
       join(dataDirectory, "recipes.csv"),
-      "id,name,minutes\n1,Soup,10\n1,Another soup,20\n",
+      'id,name,minutes,instructions,aggregateRating\n1,Soup,10,,\n1,Another soup,20,,\n',
     );
     await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
       "duplicate recipe id",
+    );
+  });
+
+  it("validates optional detail fields and anonymous rating values", async () => {
+    const dataDirectory = await makePreparedDirectory();
+    await writeFile(
+      join(dataDirectory, "recipes.csv"),
+      'id,name,minutes,instructions,aggregateRating\n1,Soup,10,"[""Simmer.""]",5.5\n',
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "invalid aggregate rating",
+    );
+
+    await writeFile(
+      join(dataDirectory, "recipes.csv"),
+      "id,name,minutes,instructions,aggregateRating\n1,Soup,10,not-json,\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "invalid instructions JSON",
+    );
+
+    await writeFile(
+      join(dataDirectory, "recipes.csv"),
+      "id,name,minutes,instructions,aggregateRating\n1,Soup,10,,\n",
+    );
+    await writeFile(
+      join(dataDirectory, "ratings.csv"),
+      "recipeId,rating\n1,0\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "invalid rating",
+    );
+    await writeFile(
+      join(dataDirectory, "ratings.csv"),
+      "recipeId,rating\n2,5\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "references an unknown recipe",
+    );
+
+    await writeFile(
+      join(dataDirectory, "ratings.csv"),
+      "recipeId,rating,user_id\n1,5,123\n",
+    );
+    await expect(validatePreparedData(dataDirectory)).rejects.toThrow(
+      "contains unsupported columns",
     );
   });
 

@@ -31,6 +31,19 @@ const recipeSearchPageSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+const recipeDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  minutes: z.number().int().nonnegative().nullable(),
+  instructions: z.array(z.string()).nullable(),
+  ingredients: z.array(z.string()),
+  cuisines: z.array(z.string()),
+  ratings: z.object({
+    individual: z.array(z.number().int().min(1).max(5)),
+    aggregate: z.number().positive().max(5).nullable(),
+  }),
+});
+
 const errorResponseSchema = z.object({
   error: z.object({ message: z.string() }),
 });
@@ -77,6 +90,18 @@ export async function parseIngredients(text: string) {
 }
 
 export type RecipeSearchPage = z.infer<typeof recipeSearchPageSchema>;
+export type RecipeDetail = z.infer<typeof recipeDetailSchema>;
+
+export async function fetchRecipeDetail(
+  id: string,
+  signal?: AbortSignal,
+): Promise<RecipeDetail> {
+  return requestJson(
+    `/api/recipes/${encodeURIComponent(id)}`,
+    recipeDetailSchema,
+    { signal },
+  );
+}
 
 export async function searchRecipes(
   criteria: {

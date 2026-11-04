@@ -29,9 +29,23 @@ export interface RecipeSearchPage {
   nextCursor: string | null;
 }
 
+export interface RecipeDetail {
+  id: string;
+  name: string;
+  minutes: number | null;
+  instructions: string[] | null;
+  ingredients: string[];
+  cuisines: string[];
+  ratings: {
+    individual: number[];
+    aggregate: number | null;
+  };
+}
+
 export interface RecipeSearchRepository {
   getCuisineNames(): Promise<readonly string[]>;
   search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage>;
+  getRecipeDetail(id: string): Promise<RecipeDetail | null>;
 }
 
 export function mapRecipeSearchResult(

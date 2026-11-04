@@ -19,6 +19,7 @@ export interface PreparedDataCounts {
   recipes: number;
   ingredients: number;
   uses: number;
+  ratings: number;
   aliases: number;
   ingredientCategories: number;
   recipeCuisines: number;
@@ -36,6 +37,7 @@ type CsvRow = Readonly<Record<string, string>>;
 async function* readCsvRows(
   filePath: string,
   requiredColumns: readonly string[],
+  requireExactColumns = false,
 ): AsyncGenerator<CsvRow> {
   let headersValidated = false;
   const parser = parse({
@@ -45,6 +47,15 @@ async function* readCsvRows(
       if (missing.length > 0) {
         throw new Error(
           `${filePath} is missing required columns: ${missing.join(", ")}.`,
+        );
+      }
+      if (
+        requireExactColumns &&
+        (headers.length !== requiredColumns.length ||
+          requiredColumns.some((column) => !headers.includes(column)))
+      ) {
+        throw new Error(
+          `${filePath} contains unsupported columns; expected only ${requiredColumns.join(", ")}.`,
         );
       }
       headersValidated = true;
@@ -78,6 +89,42 @@ function parseMinutes(value: string | undefined, rowNumber: number): number | nu
   return minutes;
 }
 
+function parseInstructions(value: string | undefined, rowNumber: number): string[] | null {
+  if (value === undefined || value.trim() === "") return null;
+  let instructions: unknown;
+  try {
+    instructions = JSON.parse(value);
+  } catch {
+    throw new Error(`recipes.csv row ${rowNumber} has invalid instructions JSON.`);
+  }
+  if (
+    !Array.isArray(instructions) ||
+    !instructions.every((step) => typeof step === "string" && step.trim() !== "")
+  ) {
+    throw new Error(`recipes.csv row ${rowNumber} has invalid instructions.`);
+  }
+  return instructions.length === 0 ? null : instructions;
+}
+
+function parseAggregateRating(
+  value: string | undefined,
+  rowNumber: number,
+): number | null {
+  if (value === undefined || value.trim() === "") return null;
+  const rating = Number(value);
+  if (!Number.isFinite(rating) || rating <= 0 || rating > 5) {
+    throw new Error(`recipes.csv row ${rowNumber} has an invalid aggregate rating.`);
+  }
+  return rating;
+}
+
+function parseRating(value: string | undefined, rowNumber: number): number {
+  if (value === undefined || !/^[1-5]$/u.test(value)) {
+    throw new Error(`ratings.csv row ${rowNumber} has an invalid rating.`);
+  }
+  return Number(value);
+}
+
 export function assertFreshGraph(nodeCount: number): void {
   if (!Number.isSafeInteger(nodeCount) || nodeCount < 0) {
     throw new Error("Neo4j returned an invalid node count.");
@@ -100,6 +147,7 @@ export async function validatePreparedData(
     recipes: 0,
     ingredients: 0,
     uses: 0,
+    ratings: 0,
     aliases: 0,
     ingredientCategories: 0,
     recipeCuisines: 0,
@@ -109,7 +157,9 @@ export async function validatePreparedData(
     "id",
     "name",
     "minutes",
-  ])) {
+    "instructions",
+    "aggregateRating",
+  ], true)) {
     counts.recipes += 1;
     if (!isNonEmpty(row["id"]) || !isNonEmpty(row["name"])) {
       throw new Error(`recipes.csv row ${counts.recipes + 1} has an empty id or name.`);
@@ -118,7 +168,23 @@ export async function validatePreparedData(
       throw new Error(`recipes.csv contains duplicate recipe id ${row["id"]}.`);
     }
     parseMinutes(row["minutes"], counts.recipes + 1);
+    parseInstructions(row["instructions"], counts.recipes + 1);
+    parseAggregateRating(row["aggregateRating"], counts.recipes + 1);
     recipeIds.add(row["id"]);
+  }
+
+  for await (const row of readCsvRows(join(dataDirectory, "ratings.csv"), [
+    "recipeId",
+    "rating",
+  ], true)) {
+    counts.ratings += 1;
+    const recipeId = row["recipeId"];
+    if (!isNonEmpty(recipeId) || !recipeIds.has(recipeId)) {
+      throw new Error(
+        `ratings.csv row ${counts.ratings + 1} references an unknown recipe.`,
+      );
+    }
+    parseRating(row["rating"], counts.ratings + 1);
   }
 
   for await (const row of readCsvRows(join(dataDirectory, "ingredients.csv"), [
@@ -282,18 +348,41 @@ async function* recipeRows(directory: string): AsyncGenerator<{
   id: string;
   name: string;
   minutes: number | null;
+  instructions: string[] | null;
+  aggregateRating: number | null;
 }> {
   let rowNumber = 1;
   for await (const row of readCsvRows(join(directory, "recipes.csv"), [
     "id",
     "name",
     "minutes",
+    "instructions",
+    "aggregateRating",
   ])) {
     rowNumber += 1;
     yield {
       id: row["id"] ?? "",
       name: row["name"] ?? "",
       minutes: parseMinutes(row["minutes"], rowNumber),
+      instructions: parseInstructions(row["instructions"], rowNumber),
+      aggregateRating: parseAggregateRating(row["aggregateRating"], rowNumber),
+    };
+  }
+}
+
+async function* ratingRows(directory: string): AsyncGenerator<{
+  recipeId: string;
+  rating: number;
+}> {
+  let rowNumber = 1;
+  for await (const row of readCsvRows(join(directory, "ratings.csv"), [
+    "recipeId",
+    "rating",
+  ])) {
+    rowNumber += 1;
+    yield {
+      recipeId: row["recipeId"] ?? "",
+      rating: parseRating(row["rating"], rowNumber),
     };
   }
 }
@@ -377,17 +466,36 @@ async function* recipeCuisineRows(
   }
 }
 
-async function writeRecipeBatch(session: Session, rows: {
-  id: string;
-  name: string;
-  minutes: number | null;
-}[]): Promise<void> {
+async function writeRecipeBatch(
+  session: Session,
+  rows: {
+    id: string;
+    name: string;
+    minutes: number | null;
+    instructions: string[] | null;
+    aggregateRating: number | null;
+  }[],
+): Promise<void> {
   await session.run(
     `UNWIND $rows AS row
      MERGE (recipe:Recipe {id: row.id})
      SET recipe.name = row.name
+     SET recipe.instructions = row.instructions
+     SET recipe.aggregateRating = row.aggregateRating
      FOREACH (_ IN CASE WHEN row.minutes IS NULL THEN [] ELSE [1] END |
        SET recipe.minutes = row.minutes)`,
+    { rows },
+  );
+}
+
+async function writeRatingBatch(
+  session: Session,
+  rows: { recipeId: string; rating: number }[],
+): Promise<void> {
+  await session.run(
+    `UNWIND $rows AS row
+     MATCH (recipe:Recipe {id: row.recipeId})
+     CREATE (recipe)-[:HAS_RATING]->(:Rating {value: row.rating})`,
     { rows },
   );
 }
@@ -500,6 +608,9 @@ export async function importPreparedData(
     await runBatched(recipeRows(dataDirectory), (batch) =>
       writeRecipeBatch(session, batch),
     );
+    await runBatched(ratingRows(dataDirectory), (batch) =>
+      writeRatingBatch(session, batch),
+    );
     await runBatched(ingredientRows(dataDirectory), (batch) =>
       writeIngredientBatch(session, batch),
     );
@@ -550,7 +661,7 @@ async function main(args: string[]): Promise<void> {
   }
   const counts = await importPreparedData(dataDirectory, readConfig());
   console.log(
-    `Imported ${counts.recipes} recipes, ${counts.ingredients} ingredients, ${counts.uses} USES relationships, ${counts.aliases} aliases, ${counts.ingredientCategories} ingredient categories, and ${counts.recipeCuisines} recipe cuisines.`,
+    `Imported ${counts.recipes} recipes, ${counts.ingredients} ingredients, ${counts.uses} USES relationships, ${counts.ratings} ratings, ${counts.aliases} aliases, ${counts.ingredientCategories} ingredient categories, and ${counts.recipeCuisines} recipe cuisines.`,
   );
 }
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { prepareDataset } from "../scripts/prepare-data-cli.js";
 
 const fixturePath = new URL("./fixtures/RAW_recipes.csv", import.meta.url);
+const interactionsFixturePath = new URL("./fixtures/RAW_interactions.csv", import.meta.url);
 const categoryFixturePath = new URL("./fixtures/ingredient-categories.csv", import.meta.url);
 const cuisineFixturePath = new URL("./fixtures/cuisine-tags.csv", import.meta.url);
 
@@ -20,8 +21,10 @@ describe("prepareDataset", () => {
         undefined,
         categoryFixturePath.pathname,
         cuisineFixturePath.pathname,
+        interactionsFixturePath.pathname,
       );
       const recipes = await readFile(join(outputPath, "recipes.csv"), "utf8");
+      const ratings = await readFile(join(outputPath, "ratings.csv"), "utf8");
       const ingredients = await readFile(join(outputPath, "ingredients.csv"), "utf8");
       const uses = await readFile(join(outputPath, "recipe_ingredients.csv"), "utf8");
       const aliases = await readFile(join(outputPath, "ingredient_aliases.csv"), "utf8");
@@ -33,8 +36,9 @@ describe("prepareDataset", () => {
       const report = await readFile(join(outputPath, "summary.json"), "utf8");
 
       expect(recipes).toBe(
-        'id,name,minutes\n1,"Soup, ""simple""",15\n2,No time,\n3,Long,133\n',
+        'id,name,minutes,instructions,aggregateRating\n1,"Soup, ""simple""",15,"[""Simmer soup."",""Serve warm.""]",4.5\n2,No time,,,\n3,Long,133,"[""Cook slowly.""]",4.2\n',
       );
+      expect(ratings).toBe("recipeId,rating\n1,5\n1,3\n");
       expect(ingredients).toContain("olive oil,true");
       expect(ingredients).toContain("salt,true");
       expect(ingredients).toContain("pepper,false");
@@ -51,6 +55,9 @@ describe("prepareDataset", () => {
       expect(uses).not.toContain("not imported");
       expect(report).toContain('"recipes": 3');
       expect(report).not.toContain("contributor");
+      expect(report).not.toContain("user_id");
+      expect(ratings).not.toContain("111");
+      expect(ratings).not.toContain("review");
       expect(summary).toEqual({
         sourceRecords: 4,
         recipes: 3,
@@ -59,6 +66,7 @@ describe("prepareDataset", () => {
         uses: 5,
         ingredientCategories: 1,
         recipeCuisines: 1,
+        ratings: 2,
         missingCookingTimes: 1,
         invalidCookingTimes: 0,
         cookingTimeOutliers: 1,
@@ -82,6 +90,7 @@ describe("prepareDataset", () => {
         aliasPath,
         categoryFixturePath.pathname,
         cuisineFixturePath.pathname,
+        interactionsFixturePath.pathname,
       );
       await expect(
         readFile(join(outputPath, "ingredient_aliases.csv"), "utf8"),
@@ -98,8 +107,41 @@ describe("prepareDataset", () => {
           aliasPath,
           categoryFixturePath.pathname,
           cuisineFixturePath.pathname,
+          interactionsFixturePath.pathname,
         ),
       ).rejects.toThrow("conflicting canonical names");
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed or unknown individual source ratings", async () => {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), "recipe-graph-ratings-"));
+    const interactionsPath = join(temporaryDirectory, "interactions.csv");
+    try {
+      await writeFile(interactionsPath, "recipe_id,rating\n1,6\n");
+      await expect(
+        prepareDataset(
+          fixturePath.pathname,
+          join(temporaryDirectory, "invalid-rating"),
+          undefined,
+          categoryFixturePath.pathname,
+          cuisineFixturePath.pathname,
+          interactionsPath,
+        ),
+      ).rejects.toThrow("invalid rating for recipe 1");
+
+      await writeFile(interactionsPath, "recipe_id,rating\n999,5\n");
+      await expect(
+        prepareDataset(
+          fixturePath.pathname,
+          join(temporaryDirectory, "unknown-recipe"),
+          undefined,
+          categoryFixturePath.pathname,
+          cuisineFixturePath.pathname,
+          interactionsPath,
+        ),
+      ).rejects.toThrow("references unknown recipe 999");
     } finally {
       await rm(temporaryDirectory, { recursive: true, force: true });
     }
@@ -117,6 +159,7 @@ describe("prepareDataset", () => {
           undefined,
           invalidCategoryPath,
           cuisineFixturePath.pathname,
+          interactionsFixturePath.pathname,
         ),
       ).rejects.toThrow("unsupported ingredient category vegetarian");
 
@@ -131,6 +174,7 @@ describe("prepareDataset", () => {
           undefined,
           invalidCategoryPath,
           cuisineFixturePath.pathname,
+          interactionsFixturePath.pathname,
         ),
       ).rejects.toThrow("not present in the prepared ingredients");
     } finally {
@@ -148,6 +192,7 @@ describe("prepareDataset", () => {
         undefined,
         categoryFixturePath.pathname,
         cuisineFixturePath.pathname,
+        interactionsFixturePath.pathname,
       );
       const categories = await readFile(join(outputPath, "ingredient_categories.csv"), "utf8");
       const cuisines = await readFile(join(outputPath, "recipe_cuisines.csv"), "utf8");
@@ -174,6 +219,7 @@ describe("prepareDataset", () => {
           undefined,
           categoryFixturePath.pathname,
           cuisinePath,
+          interactionsFixturePath.pathname,
         ),
       ).rejects.toThrow("duplicate cuisine mapping for italian");
     } finally {

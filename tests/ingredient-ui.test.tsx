@@ -58,6 +58,233 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
 }
 
 describe("ingredient criteria interface", () => {
+  it("opens a recipe detail view with instructions and anonymous individual ratings", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ ingredients: ["salt", "water"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          included: ["salt"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          recipes: [
+            {
+              id: "recipe-1",
+              name: "Soup",
+              minutes: 25,
+              matchedIngredients: ["salt"],
+              missingIngredients: [],
+              excludedIngredients: [],
+            },
+          ],
+          totalCount: 1,
+          nextCursor: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "recipe-1",
+          name: "Soup",
+          minutes: 25,
+          instructions: ["Simmer.", "Serve."],
+          ingredients: ["salt", "water"],
+          cuisines: ["Italian"],
+          ratings: { individual: [5, 3], aggregate: null },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "salt");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    await user.click(await screen.findByRole("button", { name: "View details for Soup" }));
+
+    const details = await screen.findByRole("region", { name: "Soup" });
+    expect(details).toHaveTextContent("25 minutes");
+    expect(details).toHaveTextContent("salt, water");
+    expect(details).toHaveTextContent("Italian");
+    expect(details).toHaveTextContent("Simmer.");
+    expect(details).toHaveTextContent("Serve.");
+    expect(details).toHaveTextContent("5 out of 5");
+    expect(details).toHaveTextContent("3 out of 5");
+    expect(details).not.toHaveTextContent(/contributor|rater|user id/i);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/recipes/recipe-1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("omits missing detail fields and uses the available aggregate rating", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ ingredients: ["lettuce"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          included: [],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          recipes: [
+            {
+              id: "recipe-2",
+              name: "Salad",
+              minutes: null,
+              matchedIngredients: [],
+              missingIngredients: [],
+              excludedIngredients: [],
+            },
+          ],
+          totalCount: 1,
+          nextCursor: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "recipe-2",
+          name: "Salad",
+          minutes: null,
+          instructions: null,
+          ingredients: ["lettuce"],
+          cuisines: [],
+          ratings: { individual: [], aggregate: 4.25 },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "lettuce");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    await user.click(await screen.findByRole("button", { name: "View details for Salad" }));
+
+    const details = await screen.findByRole("region", { name: "Salad" });
+    expect(details).toHaveTextContent("lettuce");
+    expect(details).toHaveTextContent("Average rating: 4.25 out of 5");
+    expect(details).not.toHaveTextContent("minutes");
+    expect(details).not.toHaveTextContent("Instructions");
+    expect(details).not.toHaveTextContent("Cuisine");
+    expect(details).not.toHaveTextContent("No ratings yet.");
+  });
+
+  it("shows an explicit empty rating state and never treats an unknown recipe as details", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ ingredients: ["rice"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          included: ["rice"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          recipes: [
+            {
+              id: "missing-detail",
+              name: "Search result",
+              minutes: 10,
+              matchedIngredients: ["rice"],
+              missingIngredients: [],
+              excludedIngredients: [],
+            },
+          ],
+          totalCount: 1,
+          nextCursor: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { code: "RECIPE_NOT_FOUND", message: "The requested recipe was not found." } },
+          404,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "rice");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    await user.click(await screen.findByRole("button", { name: "View details for Search result" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The requested recipe was not found.",
+    );
+    expect(screen.getByRole("heading", { name: "Recipe details" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Search result", level: 2 })).toBeVisible();
+    expect(screen.queryByText("No ratings yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows the no-ratings state when the detail response has no rating sources", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ ingredients: ["rice"] }))
+      .mockResolvedValueOnce(jsonResponse(filterOptions))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          included: ["rice"],
+          excluded: [],
+          excludedCategories: [],
+          unrecognized: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          recipes: [
+            {
+              id: "recipe-3",
+              name: "Rice",
+              minutes: 5,
+              matchedIngredients: ["rice"],
+              missingIngredients: [],
+              excludedIngredients: [],
+            },
+          ],
+          totalCount: 1,
+          nextCursor: null,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "recipe-3",
+          name: "Rice",
+          minutes: 5,
+          instructions: null,
+          ingredients: ["rice"],
+          cuisines: [],
+          ratings: { individual: [], aggregate: null },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    const user = userEvent.setup();
+    await screen.findByRole("combobox", { name: "Search recognized ingredients" });
+    await user.type(screen.getByRole("textbox", { name: "Ingredients you have" }), "rice");
+    await user.click(screen.getByRole("button", { name: "Interpret ingredients" }));
+    await user.click(await screen.findByRole("button", { name: "View details for Rice" }));
+
+    const details = await screen.findByRole("region", { name: "Rice" });
+    expect(details).toHaveTextContent("No ratings yet.");
+  });
+
   it("shows canonical alias and typo matches and searches with excluded criteria", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

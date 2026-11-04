@@ -48,6 +48,10 @@ class TestRecipeSearchRepository implements RecipeSearchRepository {
     return ["Italian", "Mexican"];
   }
 
+  async getRecipeDetail() {
+    return null;
+  }
+
   async search(): Promise<RecipeSearchPage> {
     return { recipes: [], totalCount: 0, nextCursor: null };
   }

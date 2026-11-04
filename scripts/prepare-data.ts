@@ -14,6 +14,8 @@ export interface PreparedRecipe {
   id: string;
   name: string;
   minutes: number | null;
+  instructions: string[] | null;
+  aggregateRating: number | null;
 }
 
 export interface PreparedIngredient {
@@ -151,6 +153,28 @@ export function normalizeIngredientName(name: string): string {
     .trim();
 }
 
+function parseInstructions(row: RawRecipeRow): string[] | null {
+  const source = row["steps"] ?? row["instructions"] ?? "";
+  if (source.trim() === "") return null;
+  const instructions = parseIngredientList(source)
+    .map((instruction) => instruction.trim())
+    .filter((instruction) => instruction !== "");
+  return instructions.length === 0 ? null : instructions;
+}
+
+function parseAggregateRating(source: string | undefined): number | null {
+  const trimmed = source?.trim() ?? "";
+  if (trimmed === "") return null;
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/u.test(trimmed)) {
+    throw new Error("Recipe row contains an invalid aggregate rating.");
+  }
+  const rating = Number(trimmed);
+  if (!Number.isFinite(rating) || rating < 0 || rating > 5) {
+    throw new Error("Recipe row contains an invalid aggregate rating.");
+  }
+  return rating === 0 ? null : rating;
+}
+
 function parseMinutes(sourceValue: string): {
   minutes: number | null;
   reason: CookingTimeIssue["reason"] | null;
@@ -176,6 +200,10 @@ export function prepareRecipeRow(row: RawRecipeRow): PreparedRecipeRow {
   const id = requiredValue(row, "id");
   const name = requiredValue(row, "name");
   const parsedMinutes = parseMinutes(row["minutes"] ?? "");
+  const instructions = parseInstructions(row);
+  const aggregateRating = parseAggregateRating(
+    row["aggregate_rating"] ?? row["average_rating"] ?? row["rating"],
+  );
   const parsedIngredients = parseIngredientList(row["ingredients"] ?? "");
   const uniqueNames = new Set<string>();
 
@@ -193,6 +221,8 @@ export function prepareRecipeRow(row: RawRecipeRow): PreparedRecipeRow {
       id,
       name,
       minutes: parsedMinutes.minutes,
+      instructions,
+      aggregateRating,
     },
     ingredients: ingredientNames.map((ingredientName) => ({
       name: ingredientName,

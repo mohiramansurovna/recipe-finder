@@ -47,6 +47,9 @@ const recipeSearchRequestSchema = z
     cursor: z.string().min(1).max(4096).nullable().default(null),
   })
   .strict();
+const recipeDetailParamsSchema = z.object({
+  id: z.string().trim().min(1).max(100),
+});
 
 function sendError(response: Response, statusCode: number, code: string, message: string) {
   response.status(statusCode).json({ error: { code, message } });
@@ -194,6 +197,43 @@ export function createApiApp(
           503,
           "GRAPH_UNAVAILABLE",
           "Recipe data is temporarily unavailable.",
+          { cause: error },
+        ),
+      );
+    }
+  });
+
+  app.get("/api/recipes/:id", async (request: Request, response: Response, next) => {
+    const parsedParams = recipeDetailParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) {
+      sendError(response, 400, "INVALID_REQUEST", "Provide a valid recipe ID.");
+      return;
+    }
+
+    if (recipeSearchRepository === undefined) {
+      next(
+        new ApiError(
+          503,
+          "SEARCH_UNAVAILABLE",
+          "Recipe details are temporarily unavailable.",
+        ),
+      );
+      return;
+    }
+
+    try {
+      const recipe = await recipeSearchRepository.getRecipeDetail(parsedParams.data.id);
+      if (recipe === null) {
+        sendError(response, 404, "RECIPE_NOT_FOUND", "The requested recipe was not found.");
+        return;
+      }
+      response.json(recipe);
+    } catch (error) {
+      next(
+        new ApiError(
+          503,
+          "GRAPH_UNAVAILABLE",
+          "Recipe details are temporarily unavailable.",
           { cause: error },
         ),
       );

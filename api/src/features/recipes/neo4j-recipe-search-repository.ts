@@ -9,6 +9,7 @@ import {
 } from "./recipe-search-cursor.js";
 import type {
   RecipeSearchCriteria,
+  RecipeDetail,
   RecipeSearchPage,
   RecipeSearchRecord,
 } from "./recipe-search-types.js";
@@ -77,6 +78,30 @@ ORDER BY missingCount ASC, matchedCount DESC, excludedCount ASC, id ASC
 LIMIT $limit
 `;
 
+const RECIPE_DETAIL_QUERY = `
+MATCH (recipe:Recipe {id: $id})
+CALL {
+  WITH recipe
+  OPTIONAL MATCH (recipe)-[:USES]->(ingredient:Ingredient)
+  RETURN collect(DISTINCT ingredient.name) AS ingredients
+}
+CALL {
+  WITH recipe
+  OPTIONAL MATCH (recipe)-[:IN_CUISINE]->(cuisine:Cuisine)
+  RETURN collect(DISTINCT cuisine.name) AS cuisines
+}
+CALL {
+  WITH recipe
+  OPTIONAL MATCH (recipe)-[:HAS_RATING]->(rating:Rating)
+  RETURN collect(rating.value) AS individualRatings
+}
+RETURN recipe.id AS id, recipe.name AS name, recipe.minutes AS minutes,
+       recipe.instructions AS instructions,
+       recipe.aggregateRating AS aggregateRating,
+       ingredients AS ingredients, cuisines AS cuisines,
+       individualRatings AS individualRatings
+`;
+
 function readString(value: unknown, field: string): string {
   if (typeof value !== "string") {
     throw new Error(`Neo4j returned a recipe without a valid ${field}.`);
@@ -98,6 +123,34 @@ function readIngredientNames(value: unknown): string[] {
     throw new Error("Neo4j returned a recipe with invalid ingredient data.");
   }
   return value;
+}
+
+function readOptionalStrings(value: unknown, field: string): string[] | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    throw new Error(`Neo4j returned a recipe with invalid ${field}.`);
+  }
+  return value;
+}
+
+function readRating(value: unknown, field: string): number {
+  const rating = neo4j.isInt(value) ? value.toNumber() : value;
+  if (typeof rating !== "number" || !Number.isFinite(rating) || rating <= 0 || rating > 5) {
+    throw new Error(`Neo4j returned a recipe with an invalid ${field}.`);
+  }
+  return rating;
+}
+
+function readRatings(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Neo4j returned a recipe with invalid individual ratings.");
+  }
+  return value.map((rating) => readRating(rating, "individual rating"));
+}
+
+function readAggregateRating(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  return readRating(value, "aggregate rating");
 }
 
 function readTotalCount(record: Neo4jRecord | undefined): number {
@@ -184,6 +237,7 @@ export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
         ) {
           throw new Error("Neo4j returned recipe results in an invalid rank order.");
         }
+
       }
 
       const hasMore = records.length > PAGE_SIZE;
@@ -198,6 +252,33 @@ export class Neo4jRecipeSearchRepository implements RecipeSearchRepository {
         recipes: pageRecords.map(({ recipe }) => mapRecipeSearchResult(recipe, criteria)),
         totalCount,
         nextCursor,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getRecipeDetail(id: string): Promise<RecipeDetail | null> {
+    const session = this.driver.session({ database: this.database });
+    try {
+      const result = await session.run(RECIPE_DETAIL_QUERY, { id });
+      const record = result.records[0];
+      if (record === undefined) return null;
+
+      const individualRatings = readRatings(record.get("individualRatings"));
+      return {
+        id: readString(record.get("id"), "id"),
+        name: readString(record.get("name"), "name"),
+        minutes: readMinutes(record.get("minutes")),
+        instructions: readOptionalStrings(record.get("instructions"), "instructions"),
+        ingredients: readIngredientNames(record.get("ingredients")),
+        cuisines: readIngredientNames(record.get("cuisines")),
+        ratings: {
+          individual: individualRatings,
+          aggregate: individualRatings.length === 0
+            ? readAggregateRating(record.get("aggregateRating"))
+            : null,
+        },
       };
     } finally {
       await session.close();
