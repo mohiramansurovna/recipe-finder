@@ -11,3 +11,14 @@ docs
 .env
 .env.*
 !.env.example
+.terraform
+infra
+specs
+.specify
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+*.pem
+*.key

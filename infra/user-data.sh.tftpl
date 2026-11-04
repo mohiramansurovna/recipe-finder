@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+
+exec > >(tee -a /var/log/recipe-finder-bootstrap.log | logger -t recipe-finder-bootstrap -s 2>/dev/console) 2>&1
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl docker.io docker-compose-v2 openssh-server rsync
+systemctl enable --now docker ssh
+usermod -aG docker ubuntu
+install -d -o ubuntu -g ubuntu -m 0750 /opt/recipe-graph/data/prepared
+ssh-keygen -A
+
+fingerprint="$(ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256 | awk '{print $2}')"
+printf 'DEMO_SSH_HOST_KEY_SHA256=%s\n' "$fingerprint" > /dev/console

@@ -98,3 +98,10 @@ See [the data-preparation guide](docs/data-preparation.md) for the CSV contracts
 This repository is being built in release order. The R0 changes establish data preparation, Neo4j import, and the local Compose environment. The current R1 slice adds ingredient parsing and editable chips; recipe search, ranking, pagination, and time filters are planned separately.
 
 See [the product requirements](docs/prd.md), [the graph data model](docs/data-model.md), and [the architecture](docs/architecture.md).
+
+## Temporary AWS demo
+
+The temporary AWS demo is operated locally and has a mandatory security review
+before any public resources are created. See the [demo deployment guide](docs/demo-deployment.md)
+and [destroy checklist](docs/demo-destroy-checklist.md). GitHub Actions publishes
+application images only; it does not deploy AWS resources.

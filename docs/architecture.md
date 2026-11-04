@@ -48,10 +48,18 @@ Caddy -> built React/Vite assets
   unrecognized ingredient chips, and search recipes ranked by ingredient
   fit. Chip edits and time-limit changes restart the search; result pages
   are loaded with cursor pagination.
-- Demo (AWS): created with Terraform, destroyed afterwards.
-  - Persistent stack: S3 bucket for CSVs, OIDC role, budget alert.
-  - Demo stack: EC2, security group, Elastic IP, IAM instance profile.
-- Images are built in GitHub Actions and stored in GHCR.
+- Demo (AWS): one operator-managed Terraform stack with local state provisions a
+  dedicated VPC, public subnet and internet route, temporary EC2 host,
+  restricted security group, Elastic IP, operator key-pair resource, and budget
+  alert. Prepared CSV files transfer directly from the
+  operator over verified SSH; no object storage, OIDC role, or instance profile
+  is used. A single teardown action removes all resources owned by the stack.
+- GitHub Actions builds public application images and publishes them to GHCR
+  using `GITHUB_TOKEN` only. CI does not provision AWS resources or receive
+  cloud credentials.
+- Caddy serves the temporary demo over HTTPS using an IP-derived `sslip.io`
+  hostname. Only ports 80/443 are public; SSH is restricted to the operator's
+  current address, and Neo4j and API ports remain on the private Docker network.
 
 ## Non-functional requirements
 - Performance: first page of a typical search in about one second on demo

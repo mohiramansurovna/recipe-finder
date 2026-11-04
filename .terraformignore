@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.env.demo
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+.terraform/
+*.pem
+*.key
+data/raw/
+data/prepared/

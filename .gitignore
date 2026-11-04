@@ -7,5 +7,17 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.demo.example
+/.env.demo
+/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+known_hosts.demo
+*.pem
+*.key
 data/raw/
 data/prepared/
+.terraform
