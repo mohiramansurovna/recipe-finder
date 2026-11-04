@@ -12,10 +12,10 @@ npm ci
 npm run prepare:data
 ```
 
-To validate the pipeline with the small synthetic fixture instead of the full dataset:
+To validate the pipeline with the small synthetic fixtures instead of the full dataset:
 
 ```sh
-npm run prepare:data -- --input tests/fixtures/RAW_recipes.csv --output /tmp/recipe-graph-prepared
+npm test -- tests/prepare-data-cli.test.ts
 ```
 
 The command accepts `--input`, `--interactions`, and `--output`; the defaults are `data/raw/RAW_recipes.csv`, the optional `data/raw/RAW_interactions.csv`, and `data/prepared/`. An explicitly supplied interactions file must exist and contain `recipe_id` and `rating` columns. It also reads the curated `data/ingredient-aliases.csv`, `data/ingredient-categories.csv`, and `data/cuisine-tags.csv` mappings. The command streams source records and writes outputs only after processing has completed. Missing or duplicate recipe IDs, malformed ingredient, instruction, or tag lists, invalid ratings or mapping data, and category mappings for ingredients absent from the prepared vocabulary stop preparation with an explicit error. Recipes with an ID but no usable name are excluded and listed in `invalid_recipes.csv`.

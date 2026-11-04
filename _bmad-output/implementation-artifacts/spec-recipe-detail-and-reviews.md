@@ -75,3 +75,11 @@ context:
 **Commands:**
 - `npm test -- tests/prepare-data.test.ts tests/prepare-data-cli.test.ts tests/import-data.test.ts tests/recipe-search-api.integration.test.ts tests/recipe-search-types.test.ts tests/ingredient-ui.test.tsx` -- expected: all selected tests pass; use the repository's Neo4j integration configuration for graph-backed cases.
 - `npm run check` -- expected: type, lint, and configured tests pass.
+
+## Review Triage Log
+
+The isolated review layers could not access the temporary diff file; direct review found and fixed the documentation issue below.
+
+| Finding | Verdict | Evidence | Route |
+|---|---|---|---|
+| Fixture preparation example used project-wide mappings that rejected the synthetic fixture (`butter` was absent). | low | Running the documented command failed during category mapping; the fixture test exercises preparation with matching fixture mappings and passed. | patch — document the passing fixture test command instead. |
