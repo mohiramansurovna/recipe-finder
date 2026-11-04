@@ -1,0 +1,55 @@
+name: Demo Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: Terraform action to run
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+          - destroy
+
+jobs:
+  demo-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Validate shared stack
+        working-directory: tf/shared
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate demo stack
+        working-directory: tf/demo
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Run selected Terraform action
+        if: ${{ github.event.inputs.terraform_action != 'plan' }}
+        working-directory: tf/demo
+        env:
+          AWS_REGION: us-east-1
+        run: terraform ${{ github.event.inputs.terraform_action }} -auto-approve
+
+      - name: Run Terraform plan
+        if: ${{ github.event.inputs.terraform_action == 'plan' }}
+        working-directory: tf/demo
+        env:
+          AWS_REGION: us-east-1
+        run: terraform plan
