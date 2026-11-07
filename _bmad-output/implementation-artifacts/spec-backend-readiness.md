@@ -44,8 +44,8 @@ context:
 - `openspec/specs/demo-deployment/spec.md` -- preserve the API-only deployment contract, including image publication, secure ingress, launch gates, and teardown behavior.
 - `web/`, `tests/ingredient-ui.test.tsx`, `vite.config.ts`, root `package.json`, `package-lock.json`, `tsconfig.json`, and `eslint.config.js` -- remove the client and client-only tooling while preserving API, lint, typecheck, and Vitest coverage.
 - `docker-compose.yml`, `docker-compose.demo.yml`, `Caddyfile`, `Caddyfile.demo`, `.github/workflows/demo-deployment.yml`, `scripts/demo-{lib,up,smoke}.sh`, and deployment tests -- remove web image/assets and keep API-only local and demo ingress/readiness.
-- `api/src/app.ts` and `api/src/index.ts` -- split HTTP routing/error handling from composition and keep startup/shutdown behavior.
-- `api/src/features/ingredients/` and `api/src/features/recipes/` -- retain feature ownership while separating domain/application behavior, repository ports, and Neo4j adapters.
+- `api/src/index.ts` -- validate environment settings and manage API/driver startup and shutdown; `api/src/app.ts` composes services, middleware, and routes.
+- `api/src/application/`, `api/src/core/`, `api/src/infrastructure/`, and `api/src/interface/http/` -- separate application services/utilities, contracts and types, Neo4j persistence/mapping, and HTTP routing/schemas/errors.
 - `tests/` API/parser/search/detail/integration suites -- preserve contracts, ranking, cursor, privacy, and graph mapping coverage.
 - `README.md` -- retain only essential backend setup, data preparation pointer/commands, API verification, and safe demo launch/teardown guidance. Remove redundant architecture, data-model, preparation, deployment, and security-review docs only after their essential safeguards are represented in code, specs, or README.
 - `specs/008-demo-deployment/` and stale `_bmad-output` recipe-detail records -- removed after the current deployment requirements were represented in OpenSpec and the recipe detail capability was reconciled in the current PRD/specs.
@@ -57,7 +57,7 @@ context:
 - [x] `openspec/specs/demo-deployment/spec.md` -- retain the API-only deployment contract after removing the legacy duplicate specification set.
 - [x] `web/`, root tooling, and UI tests -- remove client-only implementation and dependencies without removing API tooling.
 - [x] Compose, Caddy, image workflow, deployment scripts, and tests -- keep local and demo API-only service healthy and protected.
-- [x] `api/src/` -- reorganize transport, application/domain logic, repository ports, and Neo4j adapters while preserving contracts.
+- [x] `api/src/` -- organize application, core, infrastructure, and HTTP interface responsibilities while preserving API contracts.
 - [x] `README.md` and `docs/` -- consolidate essential setup/security/teardown guidance, remove stale docs, retain `docs/prd.md`.
 - [x] API and deployment tests -- verify removed-client assumptions are replaced by API-only assertions.
 

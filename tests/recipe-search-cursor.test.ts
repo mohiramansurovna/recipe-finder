@@ -6,7 +6,7 @@ import {
   encodeRecipeSearchCursor,
   InvalidRecipeSearchCursorError,
   recipeSearchFingerprint,
-} from "../api/src/features/recipes/recipe-search-cursor.js";
+} from "../api/src/core/recipes/recipe-search.cursor.js";
 
 const criteria = {
   included: ["rice", "chicken"],

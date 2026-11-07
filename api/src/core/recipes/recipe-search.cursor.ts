@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto";
-
-import type { RecipeSearchCriteria } from "./recipe-search-types.js";
+import { createHash } from "crypto";
+import { RecipeSearchCriteria } from "./recipes.types.js";
 
 export interface RecipeSearchPosition {
   missingCount: number;

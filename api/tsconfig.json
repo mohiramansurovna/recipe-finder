@@ -1,9 +1,10 @@
 {
-  "extends": "../tsconfig.json",
-  "compilerOptions": {
-    "noEmit": false,
-    "outDir": "../dist/api",
-    "rootDir": "src"
-  },
-  "include": ["src/**/*.ts"]
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "noEmit": false,
+        "outDir": "../dist/api",
+        "rootDir": "src",
+        "ignoreDeprecations": "6.0"
+    },
+    "include": ["src/**/*.ts"]
 }

@@ -43,3 +43,10 @@ export const apiErrorHandler: ErrorRequestHandler = (error, _request, response, 
   console.error("Unhandled API request error:", error);
   sendError(response, 500, "INTERNAL_ERROR", "The request could not be completed.");
 };
+export function graphUnavailable(message: string, cause: unknown): ApiError {
+    return new ApiError(503, 'GRAPH_UNAVAILABLE', message, { cause });
+}
+
+export function searchUnavailable(message: string): ApiError {
+    return new ApiError(503, 'SEARCH_UNAVAILABLE', message);
+}

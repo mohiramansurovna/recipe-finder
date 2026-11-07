@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { IngredientService } from "../api/src/features/ingredients/application/ingredient-service.js";
-import type { IngredientRepository } from "../api/src/features/ingredients/ports/ingredient-repository.js";
+import { IngredientsService } from "../api/src/application/services/ingredients.service.js";
+import type { IngredientsRepository } from "../api/src/core/ingredients/ingredients.repository.js";
 
-describe("IngredientService", () => {
+describe("IngredientsService", () => {
   it("uses repository vocabulary and aliases for deterministic parsing", async () => {
-    const repository: IngredientRepository = {
+    const repository: IngredientsRepository = {
       getIngredientNames: vi.fn().mockResolvedValue(["green onion", "rice"]),
       getIngredientAliases: vi
         .fn()
@@ -13,7 +13,7 @@ describe("IngredientService", () => {
       getIngredientCategories: vi.fn().mockResolvedValue(["dairy"]),
     };
 
-    await expect(new IngredientService(repository).parse("scallion, no dairy")).resolves.toEqual({
+    await expect(new IngredientsService(repository).parse("scallion, no dairy")).resolves.toEqual({
       included: ["green onion"],
       excluded: [],
       excludedCategories: ["dairy"],

@@ -2,15 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 import { createApiApp } from "../api/src/app.js";
-import { InvalidRecipeSearchCursorError } from "../api/src/features/recipes/recipe-search-cursor.js";
+import { InvalidRecipeSearchCursorError } from "../api/src/core/recipes/recipe-search.cursor.js";
 import type {
   RecipeSearchCriteria,
   RecipeSearchPage,
-} from "../api/src/features/recipes/recipe-search-types.js";
-import type { IngredientRepository } from "../api/src/features/ingredients/ports/ingredient-repository.js";
-import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
+} from "../api/src/core/recipes/recipes.types.js";
+import type { IngredientsRepository } from "../api/src/core/ingredients/ingredients.repository.js";
+import type { RecipesRepository } from "../api/src/core/recipes/recipes.repository.js";
 
-class TestIngredientRepository implements IngredientRepository {
+class TestIngredientRepository implements IngredientsRepository {
   async getIngredientNames() {
     return ["butter", "chicken"];
   }
@@ -24,7 +24,7 @@ class TestIngredientRepository implements IngredientRepository {
   }
 }
 
-class TestRecipeSearchRepository implements RecipeSearchRepository {
+class TestRecipeSearchRepository implements RecipesRepository {
   readonly requests: RecipeSearchCriteria[] = [];
 
   constructor(

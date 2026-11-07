@@ -4,8 +4,8 @@ import neo4j from "neo4j-driver";
 import { z } from "zod";
 
 import { createApiApp } from "./app.js";
-import { Neo4jIngredientRepository } from "./features/ingredients/adapters/neo4j-ingredient-repository.js";
-import { Neo4jRecipeSearchRepository } from "./features/recipes/adapters/neo4j-recipe-search-repository.js";
+import { Neo4jIngredientsRepository } from "./infrastructure/neo4j/repositories/ingredients.neo4j.repository.js";
+import { Neo4jRecipesRepository } from "./infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
 
 const environmentSchema = z.object({
   NEO4J_URI: z.string().min(1).default("bolt://localhost:7687"),
@@ -21,11 +21,11 @@ async function main() {
     environment.NEO4J_URI,
     neo4j.auth.basic(environment.NEO4J_USER, environment.NEO4J_PASSWORD),
   );
-  const ingredientRepository = new Neo4jIngredientRepository(
+  const ingredientRepository = new Neo4jIngredientsRepository(
     driver,
     environment.NEO4J_DATABASE,
   );
-  const recipeSearchRepository = new Neo4jRecipeSearchRepository(
+  const recipeSearchRepository = new Neo4jRecipesRepository(
     driver,
     environment.NEO4J_DATABASE,
   );

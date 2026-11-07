@@ -4,6 +4,20 @@ Private ingredient-first recipe discovery API backed by Neo4j. The API provides
 ingredient parsing, filtered recipe search with ranked cursor pagination, and
 recipe details. There is no web client in this repository.
 
+## API source layout
+
+- `api/src/index.ts` validates environment settings and starts/shuts down the
+  API and Neo4j driver.
+- `api/src/app.ts` composes services, middleware, and HTTP routing.
+- `api/src/application/` contains ingredient parsing and application services.
+- `api/src/core/` contains recipe and ingredient types, repository contracts,
+  and search cursor logic.
+- `api/src/infrastructure/` contains Neo4j queries, repositories, readers, and
+  data mappers.
+- `api/src/interface/http/` contains Express routes, request schemas, and
+  error handling.
+- `tests/` covers these boundaries and the public API contracts.
+
 ## Requirements
 
 - Node.js 20+ and npm

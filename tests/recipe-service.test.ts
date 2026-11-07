@@ -2,18 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   InvalidRecipeCuisineError,
-  RecipeService,
-} from "../api/src/features/recipes/application/recipe-service.js";
-import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
+  RecipesService,
+} from "../api/src/application/services/recipes.service.js";
+import type { RecipesRepository } from "../api/src/core/recipes/recipes.repository.js";
 
-describe("RecipeService", () => {
+describe("RecipesService", () => {
   it("rejects unavailable cuisine selections before searching", async () => {
-    const repository: RecipeSearchRepository = {
+    const repository: RecipesRepository = {
       getCuisineNames: vi.fn().mockResolvedValue(["Italian"]),
       search: vi.fn(),
       getRecipeDetail: vi.fn(),
     };
-    const service = new RecipeService(repository);
+    const service = new RecipesService(repository);
 
     await expect(
       service.search({

@@ -6,10 +6,10 @@ import {
 } from "../api/src/app.js";
 import type {
   IngredientAlias,
-  IngredientRepository,
-} from "../api/src/features/ingredients/ports/ingredient-repository.js";
-import type { RecipeSearchPage } from "../api/src/features/recipes/recipe-search-types.js";
-import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
+  IngredientsRepository,
+} from "../api/src/core/ingredients/ingredients.repository.js";
+import type { RecipeSearchPage } from "../api/src/core/recipes/recipes.types.js";
+import type { RecipesRepository } from "../api/src/core/recipes/recipes.repository.js";
 
 const invalidRequests: { description: string; body: Record<string, unknown> | undefined }[] = [
   { body: undefined, description: "missing text" },
@@ -18,7 +18,7 @@ const invalidRequests: { description: string; body: Record<string, unknown> | un
   { body: { text: "x".repeat(2001) }, description: "text above the limit" },
 ];
 
-class TestIngredientRepository implements IngredientRepository {
+class TestIngredientRepository implements IngredientsRepository {
   constructor(
     private readonly names: readonly string[],
     private readonly failure?: Error,
@@ -41,7 +41,7 @@ class TestIngredientRepository implements IngredientRepository {
   }
 }
 
-class TestRecipeSearchRepository implements RecipeSearchRepository {
+class TestRecipeSearchRepository implements RecipesRepository {
   async getCuisineNames() {
     return ["Italian", "Mexican"];
   }

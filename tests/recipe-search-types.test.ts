@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { mapRecipeSearchResult } from "../api/src/features/recipes/recipe-search-types.js";
+import { RecipesMapper } from "../api/src/infrastructure/mappers/recipes.mapper.js";
 
-describe("mapRecipeSearchResult", () => {
+describe("RecipesMapper.toDomain", () => {
   it("reports matched, missing, and excluded recipe ingredients", () => {
     expect(
-      mapRecipeSearchResult(
+      RecipesMapper.toDomain(
         {
           id: "42",
           name: "Chicken rice",
@@ -26,7 +26,7 @@ describe("mapRecipeSearchResult", () => {
 
   it("keeps recipes with unknown cooking times", () => {
     expect(
-      mapRecipeSearchResult(
+      RecipesMapper.toDomain(
         { id: "43", name: "Salad", minutes: null, ingredientNames: ["spinach"] },
         { included: ["spinach"], excluded: [] },
       ),

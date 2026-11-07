@@ -5,8 +5,8 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 import { createApiApp } from "../api/src/app.js";
-import { Neo4jIngredientRepository } from "../api/src/features/ingredients/adapters/neo4j-ingredient-repository.js";
-import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/adapters/neo4j-recipe-search-repository.js";
+import { Neo4jIngredientsRepository } from "../api/src/infrastructure/neo4j/repositories/ingredients.neo4j.repository.js";
+import { Neo4jRecipesRepository } from "../api/src/infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
 
 const testConfig =
   process.env["NEO4J_SEARCH_TEST_URI"] !== undefined &&
@@ -162,9 +162,9 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         await seedSession.close();
       }
 
-      const repository = new Neo4jRecipeSearchRepository(driver, database);
+      const repository = new Neo4jRecipesRepository(driver, database);
       const app = createApiApp(
-        new Neo4jIngredientRepository(driver, database),
+        new Neo4jIngredientsRepository(driver, database),
         100,
         repository,
       );

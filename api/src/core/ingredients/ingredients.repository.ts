@@ -3,7 +3,7 @@ export interface IngredientAlias {
   canonicalName: string;
 }
 
-export interface IngredientRepository {
+export interface IngredientsRepository {
   /** Loads canonical ingredient names in deterministic order. */
   getIngredientNames(): Promise<readonly string[]>;
   getIngredientAliases(): Promise<readonly IngredientAlias[]>;

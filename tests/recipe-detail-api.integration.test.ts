@@ -4,15 +4,15 @@ import type { Driver } from "neo4j-driver";
 import request from "supertest";
 
 import { createApiApp } from "../api/src/app.js";
-import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/adapters/neo4j-recipe-search-repository.js";
+import { Neo4jRecipesRepository } from "../api/src/infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
 import type {
   RecipeDetail,
   RecipeSearchPage,
-} from "../api/src/features/recipes/recipe-search-types.js";
-import type { IngredientRepository } from "../api/src/features/ingredients/ports/ingredient-repository.js";
-import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
+} from "../api/src/core/recipes/recipes.types.js";
+import type { IngredientsRepository } from "../api/src/core/ingredients/ingredients.repository.js";
+import type { RecipesRepository } from "../api/src/core/recipes/recipes.repository.js";
 
-class TestIngredientRepository implements IngredientRepository {
+class TestIngredientRepository implements IngredientsRepository {
   async getIngredientNames() {
     return [];
   }
@@ -26,7 +26,7 @@ class TestIngredientRepository implements IngredientRepository {
   }
 }
 
-class TestRecipeRepository implements RecipeSearchRepository {
+class TestRecipeRepository implements RecipesRepository {
   constructor(
     private readonly detail: RecipeDetail | null,
     private readonly failure?: Error,
@@ -127,7 +127,7 @@ describe("Neo4j recipe detail repository", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
     const driver = { session: vi.fn(() => session) } as unknown as Driver;
-    const repository = new Neo4jRecipeSearchRepository(driver, "neo4j");
+    const repository = new Neo4jRecipesRepository(driver, "neo4j");
 
     await expect(repository.getRecipeDetail("recipe-1")).resolves.toEqual({
       ...availableDetail,
@@ -156,7 +156,7 @@ describe("Neo4j recipe detail repository", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
     const driver = { session: vi.fn(() => session) } as unknown as Driver;
-    const repository = new Neo4jRecipeSearchRepository(driver, "neo4j");
+    const repository = new Neo4jRecipesRepository(driver, "neo4j");
 
     await expect(repository.getRecipeDetail("recipe-2")).resolves.toEqual({
       id: "recipe-2",
@@ -175,7 +175,7 @@ describe("Neo4j recipe detail repository", () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
     const driver = { session: vi.fn(() => session) } as unknown as Driver;
-    const repository = new Neo4jRecipeSearchRepository(driver, "neo4j");
+    const repository = new Neo4jRecipesRepository(driver, "neo4j");
 
     await expect(repository.getRecipeDetail("missing")).resolves.toBeNull();
     expect(session.close).toHaveBeenCalledOnce();

@@ -91,7 +91,7 @@ Raw and prepared dataset files, credentials, and deployment state shall remain u
 
 ### 4.4 API reliability and maintainability
 
-The backend exposes a health endpoint, validates request shapes and filter values, applies API rate limiting, and reports validation, unavailable-service, and not-found failures using explicit responses. Ingredient and recipe application services, domain behavior, repository ports, Neo4j adapters, HTTP routing, and error handling have separate boundaries so they can be tested independently; account-backed capabilities remain future work.
+The backend exposes a health endpoint, validates request shapes and filter values, applies API rate limiting, and reports validation, unavailable-service, and not-found failures using explicit responses. Its code is divided into application services and parsing utilities (`api/src/application/`), contracts and recipe types (`api/src/core/`), Neo4j persistence and mapping (`api/src/infrastructure/`), and HTTP routes, schemas, and error handling (`api/src/interface/http/`). `api/src/app.ts` composes these pieces; `api/src/index.ts` starts and shuts down the API and database driver. Account-backed capabilities remain future work.
 
 The temporary HTTPS demo publicly exposes unauthenticated API requests for demonstration only; it does not provide production access control.
 
@@ -101,7 +101,7 @@ Invalid requests and cursors shall receive client errors; unavailable graph oper
 
 #### FR-11: Organize backend code around stable boundaries
 
-The backend shall be organized so ingredient, recipe-search, recipe-detail, and future account capabilities can evolve without unrelated feature changes. Domain and application behavior shall be independently testable from HTTP transport and graph persistence. Existing API behavior shall remain covered by unit and integration tests during the reorganization.
+The backend shall keep application behavior, core contracts and types, persistence adapters, and HTTP transport in separate source areas so ingredient, recipe-search, recipe-detail, and future account capabilities can evolve without unrelated feature changes. Existing API behavior shall remain covered by unit and integration tests.
 
 #### FR-12: Keep the repository backend-only
 

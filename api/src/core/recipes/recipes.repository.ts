@@ -2,9 +2,9 @@ import type {
   RecipeDetail,
   RecipeSearchCriteria,
   RecipeSearchPage,
-} from "../recipe-search-types.js";
+} from "./recipes.types.js";
 
-export interface RecipeSearchRepository {
+export interface RecipesRepository {
   getCuisineNames(): Promise<readonly string[]>;
   search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage>;
   getRecipeDetail(id: string): Promise<RecipeDetail | null>;
