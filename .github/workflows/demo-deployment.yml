@@ -39,6 +39,3 @@ jobs:
           docker buildx build --platform linux/amd64 --push \
             --tag "ghcr.io/${ghcr_owner}/recipe-finder-api:${IMAGE_TAG}" \
             --file api/Dockerfile .
-          docker buildx build --platform linux/amd64 --push \
-            --tag "ghcr.io/${ghcr_owner}/recipe-finder-web:${IMAGE_TAG}" \
-            --file web/Dockerfile .

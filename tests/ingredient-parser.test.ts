@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseIngredientText } from "../api/src/features/ingredients/ingredient-parser.js";
+import { parseIngredientText } from "../api/src/features/ingredients/domain/ingredient-parser.js";
 
 const vocabulary = [
   "butter",

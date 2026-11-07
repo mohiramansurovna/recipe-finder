@@ -64,20 +64,12 @@ services:
       retries: 5
       start_period: 10s
 
-  web:
-    image: ghcr.io/${DEMO_GHCR_OWNER:?Set DEMO_GHCR_OWNER in .env.demo}/recipe-finder-web:${DEMO_IMAGE_TAG:?Set DEMO_IMAGE_TAG in .env.demo}
-    restart: "no"
-    volumes:
-      - web_assets:/public
-
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
-      web:
-        condition: service_completed_successfully
     environment:
       DEMO_HOSTNAME: "${DEMO_HOSTNAME:?Set DEMO_HOSTNAME in .env.demo}"
     ports:
@@ -85,13 +77,11 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile.demo:/etc/caddy/Caddyfile:ro
-      - web_assets:/srv:ro
       - caddy_data:/data
       - caddy_config:/config
 
 volumes:
   import_state:
   neo4j_data:
-  web_assets:
   caddy_data:
   caddy_config:

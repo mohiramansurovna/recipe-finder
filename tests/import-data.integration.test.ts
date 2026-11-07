@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import neo4j from "neo4j-driver";
 import { describe, expect, it } from "vitest";
 
-import { Neo4jIngredientRepository } from "../api/src/features/ingredients/neo4j-ingredient-repository.js";
-import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/neo4j-recipe-search-repository.js";
+import { Neo4jIngredientRepository } from "../api/src/features/ingredients/adapters/neo4j-ingredient-repository.js";
+import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/adapters/neo4j-recipe-search-repository.js";
 import { importPreparedData } from "../scripts/import-data.js";
 
 const preparedFixtureDirectory = join(

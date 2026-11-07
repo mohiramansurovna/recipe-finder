@@ -32,8 +32,7 @@ function makeDemoProject(terraformBehavior: string, awsBehavior: string) {
   const project = mkdtempSync(resolve(tmpdir(), "recipe-demo-down-project-"));
   temporaryDirectories.push(project);
   mkdirSync(join(project, "scripts"));
-  mkdirSync(join(project, "docs"));
-  mkdirSync(join(project, "infra/terraform"), { recursive: true });
+  mkdirSync(join(project, "infra"), { recursive: true });
   mkdirSync(join(project, "bin"));
   writeFileSync(
     join(project, "scripts/demo-lib.sh"),
@@ -42,7 +41,7 @@ function makeDemoProject(terraformBehavior: string, awsBehavior: string) {
   const scriptPath = join(project, "scripts/demo-down.sh");
   writeFileSync(scriptPath, readFileSync(resolve(root, "scripts/demo-down.sh")));
   chmodSync(scriptPath, 0o755);
-  writeFileSync(join(project, "infra/terraform/terraform.tfstate"), "{}");
+  writeFileSync(join(project, "infra/terraform.tfstate"), "{}");
   writeFileSync(
     join(project, ".env.demo"),
     [
@@ -71,7 +70,7 @@ afterEach(() => {
 describe("demo teardown safety", () => {
   it("refuses to guess resource IDs when local Terraform state is missing", () => {
     const mock = makeDemoProject("", "");
-    rmSync(join(mock.project, "infra/terraform/terraform.tfstate"));
+    rmSync(join(mock.project, "infra/terraform.tfstate"));
     const result = spawnSync("bash", [mock.scriptPath], {
       cwd: mock.project,
       encoding: "utf8",
@@ -84,7 +83,7 @@ describe("demo teardown safety", () => {
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("local Terraform state is missing");
-    expect(result.stderr).toContain("destroy-checklist.md");
+    expect(result.stderr).toContain("README.md");
   });
 
   it("preserves Terraform state and reports recovery when destroy fails", () => {
@@ -120,8 +119,8 @@ esac`,
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Terraform destroy failed");
-    expect(result.stderr).toContain("destroy-checklist.md");
-    expect(readFileSync(join(mock.project, "infra/terraform/terraform.tfstate"), "utf8")).toBe("{}");
+    expect(result.stderr).toContain("README.md");
+    expect(readFileSync(join(mock.project, "infra/terraform.tfstate"), "utf8")).toBe("{}");
   });
 
   it("reports success only after state and AWS resource checks pass", () => {
@@ -174,6 +173,6 @@ esac`,
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("all stack-owned AWS resources are removed");
-    expect(readFileSync(join(mock.project, "infra/terraform/terraform.tfstate"), "utf8")).toBe("{}");
+    expect(readFileSync(join(mock.project, "infra/terraform.tfstate"), "utf8")).toBe("{}");
   });
 });

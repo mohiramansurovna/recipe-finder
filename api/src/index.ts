@@ -4,8 +4,8 @@ import neo4j from "neo4j-driver";
 import { z } from "zod";
 
 import { createApiApp } from "./app.js";
-import { Neo4jIngredientRepository } from "./features/ingredients/neo4j-ingredient-repository.js";
-import { Neo4jRecipeSearchRepository } from "./features/recipes/neo4j-recipe-search-repository.js";
+import { Neo4jIngredientRepository } from "./features/ingredients/adapters/neo4j-ingredient-repository.js";
+import { Neo4jRecipeSearchRepository } from "./features/recipes/adapters/neo4j-recipe-search-repository.js";
 
 const environmentSchema = z.object({
   NEO4J_URI: z.string().min(1).default("bolt://localhost:7687"),

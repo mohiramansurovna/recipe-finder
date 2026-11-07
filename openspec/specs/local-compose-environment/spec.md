@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Provides a repeatable local environment for starting Neo4j and loading the prepared Recipe Graph dataset, without exposing the database beyond the developer's machine.
+Provides a repeatable local environment for starting Neo4j, loading prepared graph data, and serving the API through local Caddy without exposing the database beyond the developer's machine.
 
 ## Requirements
 
@@ -52,6 +52,18 @@ The local environment SHALL restrict host access to Neo4j to the local machine a
 #### Scenario: Another machine attempts to reach Neo4j
 - **WHEN** a client connects through a non-local network interface
 - **THEN** the local Compose environment does not expose Neo4j on that interface
+
+### Requirement: Serve and verify the API locally
+The local environment SHALL route API requests through Caddy and SHALL report API health only after the guarded data import has completed.
+
+#### Scenario: Start the API after successful import
+- **GIVEN** Neo4j is healthy and the prepared-data import completed successfully
+- **WHEN** the local Compose environment starts the API
+- **THEN** Caddy proxies API requests to the healthy API without a web-client build or asset volume
+
+#### Scenario: Verify local API readiness
+- **WHEN** the developer checks API readiness
+- **THEN** the health endpoint and recipe-search API are reachable through local Caddy
 
 ### Requirement: Protect credentials and existing graph data
 The local environment SHALL use developer-supplied credentials without embedding secrets in tracked files and SHALL NOT silently replace data in a non-empty graph.

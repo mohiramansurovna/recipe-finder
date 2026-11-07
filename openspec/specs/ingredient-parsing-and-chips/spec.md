@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Lets users translate ingredient text into visible, editable ingredient criteria before recipe search is available, including terms the system cannot recognize.
+Provides deterministic API parsing of ingredient text into explicit search criteria, including terms the system cannot recognize.
 
 ## Requirements
 
@@ -56,62 +56,13 @@ The parser SHALL be a pure operation whose output depends only on the submitted 
 - **WHEN** the parser receives the same text and vocabulary more than once
 - **THEN** it returns the same categorized terms each time without accessing an external service
 
-### Requirement: Present parse results as editable chips
-The user interface SHALL display included, excluded, category-excluded, and unrecognized criteria as distinct chips and allow users to update criteria without retyping the original query.
+### Requirement: Expose ingredient vocabulary and filter metadata
+The API SHALL provide normalized ingredient names and supported ingredient categories for first-party clients without exposing contributor identities.
 
-#### Scenario: Remove an interpreted ingredient
-- **WHEN** the user removes an included or excluded chip
-- **THEN** that term is removed from the current ingredient criteria and is no longer displayed in that category
+#### Scenario: Retrieve ingredient vocabulary
+- **WHEN** a client requests the ingredient vocabulary
+- **THEN** the API returns canonical ingredient names in deterministic order
 
-#### Scenario: Toggle a recognized ingredient
-- **WHEN** the user toggles an included or excluded chip
-- **THEN** that term moves to the other recognized category
-
-#### Scenario: Add a recognized ingredient
-- **WHEN** the user adds an ingredient from the normalized vocabulary
-- **THEN** the ingredient appears in the included criteria
-
-#### Scenario: Edit criteria before recipe results have loaded
-- **WHEN** the user adds, removes, or toggles a chip before any recipe results have loaded
-- **THEN** the displayed criteria update immediately and the initial recipe results use the updated criteria
-
-#### Scenario: Edit criteria and refresh results
-- **WHEN** the user adds, removes, or toggles a chip
-- **THEN** the displayed criteria update immediately and the recipe results refresh using the updated criteria
-
-#### Scenario: Display a canonical name for an alias or typo match
-- **WHEN** submitted text is recognized through a curated alias or conservative typo match
-- **THEN** the resulting chip displays the canonical ingredient name and recipe search uses that canonical ingredient criterion
-
-#### Scenario: Remove a category exclusion
-- **WHEN** the user removes a category-exclusion chip
-- **THEN** the category is removed from the current search criteria and the recipe results refresh
-
-### Requirement: Make ingredient chips keyboard accessible
-The user interface SHALL support adding, removing, and toggling ingredient chips and removing category-exclusion chips using keyboard interaction, and expose each chip's category and available actions to assistive technology.
-
-#### Scenario: Operate a chip without a pointer
-- **WHEN** a keyboard user focuses an ingredient or category-exclusion chip and invokes its available action
-- **THEN** the action completes and the resulting category or removal is communicated accessibly
-
-### Requirement: Credit the recipe dataset without exposing contributor identities
-The user interface SHALL visibly credit the Food.com recipe dataset and SHALL NOT display contributor identities.
-
-#### Scenario: Display source attribution with ingredient criteria
-- **WHEN** the ingredient parsing interface is displayed
-- **THEN** it credits the Food.com recipe dataset and does not show recipe contributor identities
-
-### Requirement: Present ingredient search and criteria in a responsive panel
-The interface SHALL group the ingredient query, editable ingredient criteria, and add-ingredient control in a visually distinct search panel that adapts to the available viewport width.
-
-#### Scenario: View the search panel on a wide screen
-- **WHEN** a user opens the recipe search on a wide screen
-- **THEN** the ingredient query, submit action, categorized criteria chips, and add-ingredient control appear together in the search panel beside the recipe results
-
-#### Scenario: View the search panel on a narrow screen
-- **WHEN** the available viewport is too narrow for a side-by-side search panel and results
-- **THEN** the search panel reflows without horizontal page overflow and all query, criteria, and add-ingredient controls remain available
-
-#### Scenario: Edit criteria in the designed panel
-- **WHEN** a user adds, removes, or toggles an ingredient criterion in the search panel
-- **THEN** the existing accessible chip action and search-refresh behavior are preserved
+#### Scenario: Retrieve supported categories
+- **WHEN** a client requests filter metadata
+- **THEN** the API returns the supported categories and cuisines in deterministic order

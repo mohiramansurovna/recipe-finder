@@ -1,115 +1,198 @@
-# Recipe Graph: Product Requirements Document
+---
+title: Recipe Graph Product Requirements
+status: final
+updated: 2026-11-07
+---
 
-## 1. Summary
-People often look at what is in their kitchen and cannot decide what to cook. Recipe sites search by dish name, not by the ingredients you actually have. Recipe Graph lets a user type what they have in plain text, shows exactly which ingredients the app understood (and lets the user fix them), and then lists recipes ranked by how few ingredients are missing.
+# Recipe Graph Product Requirements
 
-The recipe data lives in a graph database (Neo4j) that we run ourselves. There are no external APIs and no LLM at runtime in the first versions.
+## 0. Document purpose
 
-## 2. Goals and non-goals
+This PRD is the product-level source for Recipe Graph's goals, user outcomes, scope, and roadmap. It describes the implemented backend accurately, records completed repository changes, and separates shipped capabilities from future product work. Active OpenSpec specifications define detailed, testable behavior; archived OpenSpec changes preserve history. The README is limited to essential setup and operational instructions.
 
-### Goals
-- Ingredient-first recipe discovery: "I have chicken, rice and spinach" returns recipes sorted by fewest missing ingredients.
-- Transparent interpretation: the user always sees, and can edit, the included and excluded ingredients the app extracted from their text.
-- Fully reproducible: docker compose up builds the database from CSV files and starts the whole app.
-- A live demo on AWS that is created with one command and destroyed with one command, leaving nothing behind and keeping cost near zero.
+## 1. Vision
 
-### Non-goals (first versions)
-- No LLM calls at runtime. This may be revisited if text matching proves too weak.
-- No user accounts, logins or user-submitted recipes until the personalization release.
-- No mobile app, no nutrition or health advice, no production-scale operations.
-- No production-grade AWS architecture (custom VPC, load balancer, CDN, autoscaling). The demo is one small server. These are a possible future hardening release.
-- No display of recipe contributors' identities. The dataset only has anonymous IDs and we keep it that way.
+Recipe Graph helps a home cook decide what to make with ingredients already on hand. The product interprets ingredient phrases, makes the interpretation correctable, and finds recipes ranked by fit. Recipe details and cooking instructions let the cook decide whether a result is useful.
 
-## 3. Users
-- Home cook with a few ingredients on hand who wants quick ideas.
-- Reviewer (manager, interviewer, or peer) who opens the demo or clones the repo and expects it to run in minutes.
+The current implementation is a backend API backed by a locally prepared recipe graph; the web client has been removed. The intended product is a private backend for a future first-party mobile client; this PRD does not define or commit to mobile implementation details.
 
-## 4. Core user journeys
-1. Search by text. The user types "chicken, rice, spinach, no butter". The app shows chips: included (chicken, rice, spinach), excluded (butter), and not recognized (anything it could not match). The user can remove a chip, add one, or flip it between included and excluded. Every edit refreshes the results.
-2. Browse results. Results scroll without a page limit. Each card shows the title, cooking time, matched ingredients, and missing ingredients.
-3. Filter by time. The user limits results to up to 15, 30, or 60 minutes.
-4. Later: personalize. The user marks recipes as cooked, rates them, flags disliked ingredients, and sees results reordered to fit their taste.
+## 2. Target user and journey
 
-## 5. Release roadmap
-- R0 Foundation. Repository, Docker Compose with Neo4j, data preparation script, and bulk import from CSV.
-- R1 MVP. Text to editable keywords, graph search ranked by fewest missing ingredients, infinite scroll, time filter, source attribution.
-- R2 Better matching. Aliases (scallion and green onion), typo tolerance, staples such as salt and oil not counted as missing, rarity weighting, minimum match threshold.
-- R3 Demo deployment. One Terraform stack on AWS (EC2, security group, Elastic IP, key pair), CI that builds public images to GHCR, automatic HTTPS, demo-up and demo-down scripts, and a destroy checklist. The first demo-ready point.
-- R4 Filters and substitutions. Ingredient categories (dairy, nuts, meat) for exclusions like "no dairy" and vegetarian, cuisine filter, and substitution suggestions.
-- R5 Recipe details and ratings. Show full recipe details and reviews. Do not add accounts or logins. Do not allow users to send reviews.
-- R6 Clean architecture. Refactor the codebase into a modular structure with clear boundaries between data, API and UI.
+### 2.1 Target user
 
-## 6. Feature specs map
-This is a greenfield project. Each item below is one OpenSpec change, built strictly in order. Each is a vertical slice (data, API and UI where relevant). A change is archived before the next one starts, so the specs in openspec/specs/ build up as the system grows.
+- **Home cook:** wants useful recipe ideas from ingredients available in their kitchen, with a way to save recipes they like and record their own ratings.
+- **Project operator:** prepares the dataset, runs the backend and graph, and verifies changes without exposing database credentials or contributor information.
 
-- 001 data-prep-and-import (R0)
-- 002 compose-environment (R0)
-- 003 ingredient-parsing-and-chips (R1)
-- 004 recipe-search-and-results (R1)
-- 005 aliases-and-typo-tolerance (R2)
-- 006 categories-and-filters (R4)
-- 007 ui-design-implementation (R2)
-- 008 demo-deployment (R3)
-- 009 recipe-detail-and-reviews (R5)
-- 010 modular-structure-refactor (R6)
+The API is for the first-party product, not a public third-party developer platform.
 
-Scope of 008 demo-deployment: the Terraform stack, the server bootstrap (user data), the GHCR image build workflow, the Caddy HTTPS configuration, the demo-up script (apply, copy CSVs, import, start) and the demo-down script (destroy), and the destroy checklist.
+### 2.2 User journeys
 
-## 7. Functional requirements
-- FR-1 Parse free text into three lists: included ingredients, excluded ingredients, and unrecognized words.
-- FR-2 Show the three lists as editable chips. Editing a chip triggers a new search without retyping the text.
-- FR-3 Rank recipes by fewest missing ingredients, then by most matched ingredients, with a stable tie-breaker.
-- FR-4 Return results in pages using cursor-based pagination, presented as infinite scroll.
-- FR-5 Show cooking time on each card and support time filters (up to 15, 30, 60 minutes, and longer).
-- FR-6 Credit the data source in the UI, as the dataset license requires.
-- FR-7 Never show or store personal data about recipe contributors.
+- **UJ-1. Anna finds a recipe with what she has.** Anna has no idea what to cook. She enters her available ingredients; the product identifies the terms it understands and returns matching recipes in ingredient-fit order. She opens a recipe to review its ingredients, cooking time, and instructions. The current backend provides the parsing, search, and detail capabilities; a future mobile surface is not specified here.
+- **UJ-2. Anna keeps a recipe she cooked.** After cooking a recipe, Anna saves it as a favorite and can find it later in “My Recipes.” She can submit a rating without attaching her identity to the rating shown to other users. If signed in, she can edit or remove her own rating.
 
-## 8. Non-functional requirements
-- Performance: a typical search returns its first page in about one second on demo hardware (assumption to be validated).
-- Reproducibility: a clean clone plus the data files reaches a working app with one command.
-- Security: the database is never exposed publicly (its ports are not opened and it is reachable only on the Docker network), secrets are never in the repository, the public API is rate limited, and SSH access to the demo server is limited to the operator's IP address.
-- Testability: the text parser is a pure function with unit tests, and search is covered by integration tests against a test graph.
-- Accessibility: chips can be added, removed and toggled by keyboard.
-- Cost: the demo stack exists only while demoing, and a budget alert is set before the first deploy.
-- Clean teardown: one destroy command removes every AWS resource the demo created, including any IAM roles and policies. Nothing is shared with, or left in, the account afterwards.
+## 3. Glossary
 
-## 9. Data
-- Source: the Food.com Recipes and Interactions dataset from Kaggle.
-- Used columns: name, id, minutes, tags, ingredients, and later the ratings file.
-- Graph model: Recipe uses Ingredient; Recipe is in Cuisine; Ingredient is an alias of or substitute for Ingredient. Users and ratings are added in R5. Details are in docs/data-model.md.
-- Preparation: a one-time script cleans ingredient names, merges variants, flags staples, handles cooking-time outliers, and outputs graph-ready CSV files that are bulk imported into Neo4j.
-- Storage: the prepared CSV files stay on the developer's machine and are not committed to the repository. For the demo they are copied directly to the server over SSH and imported there. No cloud storage is used for data.
+- **Canonical ingredient:** the normalized ingredient name used by recipe search after alias or typo resolution.
+- **Ingredient criteria:** included ingredients, excluded ingredients, excluded categories, and unrecognized terms derived from or edited after parsing.
+- **Source rating:** an anonymous numeric rating originating in the imported recipe dataset.
+- **User rating:** a rating authored by an account holder. The author can manage it privately; other users see numeric ratings without the author's identity.
+- **Favorite:** a recipe saved by an account holder for later access in “My Recipes.”
+- **Recipe graph:** recipe, ingredient, category, cuisine, alias, and source-rating data used by the backend.
 
-## 10. Technical direction
-These decisions belong in each change's design step, not in the specs themselves.
-- TypeScript on Node.js with Express, Zod for request validation, Vitest and Supertest for tests.
-- React with Vite for the frontend. Caddy serves the built static files, proxies /api to the Express container, and obtains HTTPS certificates automatically.
-- Neo4j Community in Docker, with the whole stack defined in Docker Compose.
-- Images built in GitHub Actions with the built-in GITHUB_TOKEN and stored in GHCR as public packages. They contain no secrets, so the server pulls them without credentials. No AWS access is needed from CI.
-- Terraform with a single stack and local state (gitignored), run from the developer's machine:
-  - Resources: EC2 instance, security group, Elastic IP and its association, key pair created from the developer's own public key, and the budget alert.
-  - No S3 bucket, no OIDC role, and no IAM instance profile unless a later change needs one. Because everything is in one state, a single terraform destroy removes all of it.
-  - A dedicated VPC, public subnet, Internet Gateway and route table are created and destroyed in the same Terraform state. There is no NAT gateway, load balancer or CloudFront.
-  - The Neo4j password is generated by Terraform and written to the server's environment file.
-  - Security group: ports 80 and 443 open to the internet, port 22 open only to the operator's IP (a Terraform variable), and no Neo4j ports.
-  - The Elastic IP is created first and its address is passed to the server bootstrap, so Caddy can use a hostname of the form <ip-with-dashes>.sslip.io and get a real certificate without owning a domain.
-- Demo flow: demo-up runs terraform apply, waits for SSH, copies the CSV files with rsync, runs the compose import service on the server, and starts the stack. demo-down runs terraform destroy.
-- Instance sizing: about 4 GB of memory (for example t3.medium) with explicit Neo4j heap and page-cache limits and a small gp3 root volume. Pricing is verified before the first apply.
+## 4. Product capabilities and requirements
 
-## 11. Success criteria
-- A clean clone reaches a working app with docker compose up in about 15 minutes, including import.
-- The parser correctly interprets at least 90% of a fixed set of about 30 test queries (target to be confirmed once the test set exists).
-- The live demo works end to end over HTTPS, then terraform destroy leaves no resources behind in the AWS account.
-- Total demo cost stays under a small budget set in advance (for example 5 dollars).
-- Every feature has an archived OpenSpec change.
+### 4.1 Ingredient interpretation
 
-## 12. Risks and open questions
-- Ingredient normalization quality is the biggest risk. Mitigation: editable chips, aliases, typo tolerance, and an LLM fallback only if needed.
-- "No dairy" style exclusions need ingredient categories, so they arrive in R4. Until then, only specific ingredients can be excluded.
-- Neo4j memory on a small instance. Mitigation: trim the dataset and set memory limits explicitly.
-- Copilot usage limits. Mitigation: small tasks, commit after each task.
-- Local Terraform state: if the state file is lost before destroy, the resources become orphans in the account. Mitigation: keep the state file until demo-down has succeeded, and record a manual cleanup list in the destroy checklist.
-- Forgetting to destroy the demo. Mitigation: the budget alert, plus a calendar reminder when a demo is started.
-- Public SSH exposure if the operator's IP changes. Mitigation: the IP is a variable and must be updated before each apply; SSM Session Manager is a possible alternative later.
-- Free sslip.io hostnames share Let's Encrypt rate limits with other users. Mitigation: a real domain can replace it if a certificate cannot be issued.
-- Re-importing data on every demo costs a few minutes. Accepted for now, because it keeps the demo identical to the local development path.
+The backend already parses ingredient text deterministically against graph vocabulary, curated aliases, supported categories, and conservative spelling matches. Parse results expose included, excluded, category-excluded, and unrecognized terms.
+
+#### FR-1: Interpret ingredient text
+
+The API shall return distinct included, excluded, excluded-category, and unrecognized criteria for submitted text. It shall resolve supported aliases and conservative, unambiguous single-edit spelling variants to canonical names, and shall not silently discard unmatched terms.
+
+#### FR-2: Keep interpretation deterministic
+
+Given the same text and vocabulary, ingredient parsing shall return the same result without runtime LLM or external API calls.
+
+### 4.2 Recipe discovery and details
+
+The backend already supports recipe search, filters, cursor pagination, and recipe detail retrieval. Search filters are applied before pagination. Selected cuisines use OR semantics; with cuisine filters selected, recipes without a matching selected cuisine are excluded. A selected excluded category excludes a recipe containing any ingredient in that category.
+
+#### FR-3: Search by ingredient fit
+
+The API shall accept included and excluded ingredients, excluded categories, selected cuisines, an optional supported maximum cooking time, and an optional cursor. Results shall be ordered by fewest missing ingredients, then most matched ingredients, then fewest excluded-ingredient matches, then stable recipe ID.
+
+#### FR-4: Continue search consistently
+
+The API shall return a cursor for subsequent pages. A cursor shall be bound to the canonical ingredient, category, cuisine, and cooking-time criteria; reusing it with different criteria shall return an explicit client error.
+
+#### FR-5: Retrieve recipe details
+
+The API shall return a requested recipe's ID, name, optional cooking time and instructions, ingredients, cuisines, and available ratings. It shall return an explicit not-found response for an unknown recipe. This capability is shipped; no additional detail fields are currently committed.
+
+#### FR-6: Represent available source ratings
+
+The API shall return anonymous individual source-rating values when available; otherwise it shall return the source aggregate when available. It shall not return contributor or rater identities.
+
+### 4.3 Dataset preparation and privacy
+
+The current data pipeline prepares graph-ready recipe, ingredient, category, cuisine, alias, and anonymous rating values from the pinned Food.com dataset and imports them into a fresh graph. Raw and prepared dataset files are local-only.
+
+#### FR-7: Prepare and import graph data safely
+
+The preparation and import workflow shall validate required data, report invalid or excluded records, preserve valid cooking-time values, and refuse to load into a non-empty graph. Missing or invalid optional values shall remain unavailable rather than being fabricated.
+
+#### FR-8: Exclude source identities
+
+Contributor and rater identity fields, review text, and unrelated personal data shall not be written to prepared output or stored in the graph. Source ratings may be retained only as anonymous numeric values.
+
+#### FR-9: Protect dataset handling
+
+Raw and prepared dataset files, credentials, and deployment state shall remain untracked and shall not be included in published application images. The first-party client shall provide the dataset attribution required by its terms.
+
+### 4.4 API reliability and maintainability
+
+The backend exposes a health endpoint, validates request shapes and filter values, applies API rate limiting, and reports validation, unavailable-service, and not-found failures using explicit responses. Ingredient and recipe application services, domain behavior, repository ports, Neo4j adapters, HTTP routing, and error handling have separate boundaries so they can be tested independently; account-backed capabilities remain future work.
+
+The temporary HTTPS demo publicly exposes unauthenticated API requests for demonstration only; it does not provide production access control.
+
+#### FR-10: Preserve explicit API behavior
+
+Invalid requests and cursors shall receive client errors; unavailable graph operations shall not be reported as successful results. The API shall apply rate limits and shall not expose database access publicly.
+
+#### FR-11: Organize backend code around stable boundaries
+
+The backend shall be organized so ingredient, recipe-search, recipe-detail, and future account capabilities can evolve without unrelated feature changes. Domain and application behavior shall be independently testable from HTTP transport and graph persistence. Existing API behavior shall remain covered by unit and integration tests during the reorganization.
+
+#### FR-12: Keep the repository backend-only
+
+The web interface and its dedicated build, tests, and deployment wiring have been removed. The backend and data-preparation workflow remain runnable independently, and retained demo deployment operates without building or serving a web client.
+
+### 4.5 Accounts, ratings, and favorites — planned
+
+These are future capabilities and are not implemented by the current backend. Authentication and account data introduce new privacy and security responsibilities; their detailed contracts must be specified before implementation.
+
+#### FR-13: Manage an account
+
+In a future authenticated product, a person shall be able to create and use an account with an email address, username, and password. Authentication and account-management behavior is not yet specified.
+
+#### FR-14: Manage private rating ownership
+
+An authenticated person shall be able to add, edit, and delete their own rating for a recipe. The person's identity shall not be exposed with that rating to other users. The system shall combine user ratings with imported source ratings without publishing reviewer identities.
+
+#### FR-15: Save and find favorites
+
+An authenticated person shall be able to add and remove favorite recipes and retrieve their saved recipes in “My Recipes.” Account deletion shall remove favorites.
+
+#### FR-16: Delete an account without identifying retained ratings
+
+When an account is deleted, the system shall remove its favorites and account data and retain any ratings only after removing their link to the deleted identity. The retained ratings shall remain anonymous.
+
+### 4.6 Recommendations and mobile — future exploration
+
+Recommendations are a possible future capability, but the recommendation basis, ranking behavior, and success criteria are undecided. Mobile is the future first-party surface, but its journeys and requirements are outside this PRD's current scope.
+
+## 5. Non-goals
+
+- A public third-party API.
+- A web client in the cleaned-up repository.
+- Mobile implementation or mobile-specific UX requirements in this PRD.
+- Recommendation ranking or personalization rules before their basis is chosen.
+- Contributor identities, public usernames on ratings, or user-submitted written reviews.
+- Runtime LLM calls or external recipe APIs.
+- Nutrition or health advice.
+- Production-scale infrastructure commitments.
+
+## 6. Scope and roadmap
+
+### Shipped backend baseline
+
+- Ingredient vocabulary and category endpoints.
+- Deterministic ingredient parsing, including aliases, conservative typo handling, category exclusions, and unrecognized terms.
+- Recipe search with cuisine/category/time filters, fit ranking, page counts, and criteria-bound cursor pagination.
+- Recipe detail API with ingredients, cuisines, instructions, and anonymous source ratings.
+- Dataset preparation and guarded graph import.
+- API validation, error responses, health check, and rate limiting.
+
+### Completed: backend-only repository readiness
+
+1. Removed web-only code and its tests/build/deployment paths while retaining the runnable API and data workflow.
+2. Reorganized the API into maintainable feature, application, repository-port, adapter, transport, and error-handling boundaries; existing API behavior remains covered by tests.
+3. Consolidated guidance into this PRD, active OpenSpec specs, archived OpenSpec history, and the essential README. The README and executable checks retain demo security and teardown safeguards.
+4. Updated active OpenSpec requirements to reflect backend-only behavior; archived changes remain unchanged.
+
+### Later: account-backed personal features
+
+Define authentication and account lifecycle behavior, then implement private rating ownership, favorites, and “My Recipes.” Keep ratings shown to other users anonymous. Specify how imported source ratings and user ratings are aggregated before implementing a combined score.
+
+### Future discovery
+
+Decide the basis for recommendations and define the first-party mobile experience before planning those capabilities.
+
+## 7. Non-functional requirements
+
+- **Privacy:** never persist or expose dataset contributor identities; keep account identity separate from ratings displayed to other users.
+- **Security:** keep Neo4j private, protect credentials and deployment state, validate inputs, and rate limit API requests. Any future account capability must protect passwords and authenticated user data.
+- **Performance:** the existing project target is about one second for a typical first search page on demo hardware; this is an unvalidated target and must be measured before it is treated as an acceptance threshold.
+- **Reproducibility:** a clean checkout with local prepared data shall support the documented backend and graph setup.
+- **Testability:** parsing shall have unit coverage; search and detail behavior shall have API and graph integration coverage; API behavior shall remain verified during structural changes.
+- **Data governance:** prepared data shall contain only fields needed by the product, and raw/prepared dataset files shall not be committed.
+- **Accessibility:** when a first-party client is designed, ingredient criteria and available actions must be operable with assistive technology and keyboard input. Detailed mobile accessibility requirements are deferred.
+
+## 8. Success measures
+
+- All shipped backend endpoints have contract tests for valid, invalid, unavailable, and not-found behavior where applicable.
+- Search results satisfy the documented ranking and cursor rules across filtered pages.
+- Ingredient parsing remains deterministic and reports unmatched terms instead of dropping them.
+- The cleanup leaves no web-client build or deployment dependency, while the API and data workflow still pass the project check suite.
+- No contributor identity appears in prepared output, graph detail responses, or ratings shown to other users.
+- The first-page performance target is benchmarked on a defined dataset and environment before being adopted as a release threshold.
+
+## 9. Open questions
+
+1. How should imported source ratings and account-holder ratings be combined into the rating data shown for a recipe?
+2. Should an account require email verification, and what password recovery and session-management behavior is needed?
+3. Is there one active user rating per recipe, and what rating scale and validation rules should apply?
+4. What recommendation inputs and ranking basis best serve the product?
+5. What mobile user journeys, platforms, and accessibility requirements should be specified?
+6. What dataset license attribution text and placement should the eventual first-party client use?
+7. What API compatibility and versioning guarantees will the backend need to provide for first-party mobile clients?

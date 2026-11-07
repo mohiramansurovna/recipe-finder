@@ -4,12 +4,12 @@ umask 077
 temporary_dir=""
 
 DEMO_ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TF_DIR="$DEMO_ROOT_DIR/infra/terraform"
+TF_DIR="$DEMO_ROOT_DIR/infra"
 source "$DEMO_ROOT_DIR/scripts/demo-lib.sh"
 
 fail() {
   demo_error "$*"
-  printf 'If Terraform state is unavailable or destroy is incomplete, follow docs/demo-destroy-checklist.md.\n' >&2
+  printf 'If Terraform state is unavailable or destroy is incomplete, follow the temporary demo teardown guidance in README.md.\n' >&2
   exit 1
 }
 

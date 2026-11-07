@@ -3,72 +3,39 @@ githubCopilot:
   cloudAgent: true
 
 context: |
-  PROJECT STATE: GREENFIELD. The repository is brand new. There is no
-  existing code, no package.json, no Docker files, no Terraform, no
-  tests, and openspec/specs/ is empty. Do not assume anything exists
-  that has not been created by an archived change. Never reference files,
-  modules or APIs that no earlier change has produced.
+  PROJECT STATE: EXISTING BACKEND APPLICATION. Treat the current repository,
+  active specifications, and shipped API behavior as authoritative. The
+  product is a private backend for a future first-party mobile client; there
+  is no web client in scope.
 
-  Project: Recipe Graph. Ingredient-first recipe discovery. The user types
-  ingredients in plain text, sees editable chips (included / excluded /
-  not recognized), and gets recipes ranked by fewest missing ingredients.
-  Full requirements: docs/prd.md. Graph schema: docs/data-model.md.
-  Architecture: docs/architecture.md.
+  Product: Recipe Graph provides deterministic ingredient parsing, recipe
+  search with filter-bound cursor pagination, recipe details, and a guarded
+  data-preparation/import workflow backed by Neo4j.
 
-  GREENFIELD RULES:
-  - Features are built strictly in order 001 to 010 (docs/prd.md section 6).
-    Each feature is one OpenSpec change, archived before the next starts.
-  - Change 001 must also create the repository skeleton (see layout below),
-    base tooling (TypeScript, lint, Vitest) and a README.
-  - Because specs/ starts empty, changes 001 to 004 and 007 create new
-    capabilities using ADDED requirements. From 005 on, changes MODIFY
-    existing capability specs instead of duplicating them.
-  - Each change is a vertical slice (data, API, UI where relevant) and
-    must leave the repo in a working, committable state.
-  - Only build what the current change needs. No speculative scaffolding
-    for later releases.
-
-  Planned repo layout (create each part only when its change needs it):
-    api/            Express + TypeScript + Zod
-    web/            React + Vite
-    data/           raw CSVs (gitignored) and prepared graph CSVs
-    scripts/        data preparation script
-    infra/          Terraform (persistent/ and demo/ stacks)
-    docker-compose.yml, Caddyfile
-    docs/           prd.md, data-model.md, architecture.md
-    openspec/       specs and changes
-
-  Stack: TypeScript, Node.js, Express, Zod, Vitest, Supertest.
-  Frontend: React + Vite, served by Caddy with a reverse proxy to the API.
-  Database: Neo4j Community in Docker. Whole stack in Docker Compose.
-  CI/Infra: GitHub Actions, GHCR, Terraform (persistent + demo stacks).
-  Data: Food.com Recipes and Interactions (Kaggle), prepared into
-  graph-ready CSVs and bulk-imported into Neo4j.
+  Stack: Node.js, TypeScript, Express, Zod, Vitest, Supertest, Neo4j Community,
+  Docker Compose, Caddy, and operator-managed Terraform for the temporary
+  demo. GitHub Actions publishes the importer and API images only.
 
   Hard constraints:
-  - No LLM or external API calls at runtime.
-  - Never show or store personal data about recipe contributors.
-  - Credit the dataset source in the UI.
-  - DB never publicly exposed; no secrets in the repo; public API rate
-    limited; raw dataset files are never committed.
-  - The text parser is a pure function with unit tests.
-  - Search uses cursor-based pagination, not offset.
-  - Chips are keyboard accessible.
-  - Ranking: fewest missing ingredients, then most matched, then a
-    stable tie-breaker.
+  - Preserve current API contracts, validation/errors, ranking and cursor
+    semantics, data-import safeguards, rate limiting, and database privacy.
+  - Keep Neo4j private; never commit secrets, raw/prepared data, or deployment
+    state; do not include dataset identities or other personal data.
+  - Keep demo security review, verified SSH, cost confirmation, and teardown
+    safeguards effective.
+  - Keep OpenSpec as the canonical scoped change record. Preserve archived
+    changes; active specs describe current backend behavior.
+  - Do not implement mobile, accounts, ratings/favorites, or recommendations
+    as part of backend cleanup.
 
 rules:
   proposal:
     - State which PRD requirement (FR-x, NFR, release) the change satisfies.
-    - State what is created from scratch versus modified (greenfield).
-    - List explicit non-goals so scope stays small.
+    - Identify explicit non-goals so scope stays small.
   specs:
-    - Use ADDED requirements for new capabilities and MODIFIED only for
-      requirements that exist in openspec/specs/.
+    - Modify existing active capabilities when behavior changes.
     - Every requirement needs at least one WHEN/THEN scenario.
   design:
     - Follow the stack in context. Justify any new dependency.
   tasks:
-    - Keep each task small enough to be its own commit.
-    - Include test tasks (unit for parser, integration for search).
-    - Early tasks in change 001 scaffold the repo before feature work.
+    - Keep tasks dependency-ordered and include relevant verification.

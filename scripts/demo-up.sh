@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 DEMO_ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TF_DIR="$DEMO_ROOT_DIR/infra/terraform"
+TF_DIR="$DEMO_ROOT_DIR/infra"
 temporary_dir=""
 password=""
 source "$DEMO_ROOT_DIR/scripts/demo-lib.sh"
@@ -164,6 +164,7 @@ main() {
     -e "$ssh_command" \
     "$PREPARED_DATA_DIR/" "ubuntu@$public_ip:/opt/recipe-graph/data/prepared/" <<'CSV_FILES'
 recipes.csv
+ratings.csv
 ingredients.csv
 recipe_ingredients.csv
 ingredient_aliases.csv
@@ -183,14 +184,17 @@ CSV_FILES
   fi
 
   local deadline=$((SECONDS + 600))
-  until curl --fail --silent --show-error "https://$public_hostname/" >/dev/null 2>&1 &&
-    curl --fail --silent --show-error "https://$public_hostname/api/filters" >/dev/null 2>&1; do
+  until curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+      "https://$public_hostname/health" >/dev/null 2>&1 &&
+    curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+      "https://$public_hostname/api/filters" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
       demo_error "HTTPS or API readiness timed out; Terraform state is retained for recovery"
       exit 1
     fi
     sleep 10
   done
+  "$DEMO_ROOT_DIR/scripts/demo-smoke.sh" "https://$public_hostname"
 
   printf 'Demo ready: https://%s\n' "$public_hostname"
   printf 'Image revision: %s\n' "$DEMO_IMAGE_TAG"

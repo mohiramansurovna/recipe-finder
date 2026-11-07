@@ -7,11 +7,9 @@ import {
 import type {
   IngredientAlias,
   IngredientRepository,
-} from "../api/src/features/ingredients/ingredient-repository.js";
-import type {
-  RecipeSearchPage,
-  RecipeSearchRepository,
-} from "../api/src/features/recipes/recipe-search-types.js";
+} from "../api/src/features/ingredients/ports/ingredient-repository.js";
+import type { RecipeSearchPage } from "../api/src/features/recipes/recipe-search-types.js";
+import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
 
 const invalidRequests: { description: string; body: Record<string, unknown> | undefined }[] = [
   { body: undefined, description: "missing text" },

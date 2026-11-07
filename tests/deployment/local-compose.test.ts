@@ -5,9 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
 const compose = readFileSync(resolve(root, "docker-compose.yml"), "utf8");
+const caddy = readFileSync(resolve(root, "Caddyfile"), "utf8");
 
 describe("local Compose network boundaries", () => {
-  it("binds the Neo4j Bolt and web ports to loopback", () => {
+  it("binds Neo4j and the API ingress to loopback", () => {
     expect(compose).toContain('"127.0.0.1:${NEO4J_BOLT_PORT:-7687}:7687"');
     expect(compose).toContain('"127.0.0.1:${APP_PORT:-8080}:80"');
   });
@@ -17,5 +18,12 @@ describe("local Compose network boundaries", () => {
     expect(compose).not.toContain('"7474:7474"');
     expect(compose).not.toContain('"7687:7687"');
     expect(compose).not.toContain('"3000:3000"');
+  });
+
+  it("runs API-only services without web assets or a client build", () => {
+    expect(compose).not.toMatch(/^\s{2}web:/m);
+    expect(compose).not.toContain("web_assets");
+    expect(caddy).toContain("reverse_proxy api:3000");
+    expect(compose).toContain("api:\n");
   });
 });

@@ -55,28 +55,16 @@ services:
       NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}"
       NEO4J_DATABASE: "${NEO4J_DATABASE:-neo4j}"
 
-  web:
-    build:
-      context: .
-      dockerfile: web/Dockerfile
-    restart: "no"
-    volumes:
-      - web_assets:/public
-
   caddy:
     image: caddy:2-alpine
     depends_on:
       api:
         condition: service_healthy
-      web:
-        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - web_assets:/srv:ro
 
 volumes:
   import_state:
   neo4j_data:
-  web_assets:

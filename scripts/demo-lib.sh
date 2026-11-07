@@ -62,13 +62,30 @@ demo_validate_public_ipv4_cidr() {
 }
 
 demo_review_is_complete() {
-  local review_file="${DEMO_ROOT_DIR}/docs/demo-security-review.md"
+  local review_file="${DEMO_ROOT_DIR}/README.md"
   [[ -r "$review_file" ]] || return 1
-  grep -qE '^- \[ \]' "$review_file" && return 1
-  grep -qE '^- \[[xX]\]' "$review_file" || return 1
-  grep -qF '**Reviewer**: _Not reviewed_' "$review_file" && return 1
-  grep -qF '**Review date**: _Not reviewed_' "$review_file" && return 1
-  grep -qF '**Approval to provision billable AWS resources**: _Not granted_' "$review_file" && return 1
+
+  local item
+  for item in \
+    "- [x] Confirm public ingress is limited to TCP 80/443 and SSH to the operator's current \`/32\`; Neo4j and the API container port are not directly exposed." \
+    "- [x] Confirm credentials, generated environment files, SSH private keys, prepared data, Terraform state, and plans are excluded from Git and published images." \
+    "- [x] Confirm the SSH host key is verified against AWS-authenticated console output and host-key checking is enabled." \
+    "- [x] Confirm image publication uses GitHub package permissions only and has no AWS credentials, OIDC role, or deployment permissions." \
+    "- [x] Confirm the estimate includes instance, storage, public IPv4, and expected run time; validate budget notification and understand its advisory nature." \
+    "- [x] Confirm prepared data transfers over verified SSH and contains no contributor or rater identities." \
+    "- [x] Confirm Terraform state is protected and retained through teardown verification." \
+    "- [x] Re-review the current deployment code and configuration before any new provisioning; the 2026-11-04 review does not cover these changes."; do
+    grep -Fxq -- "$item" "$review_file" || return 1
+  done
+
+  local reviewer review_date approval
+  reviewer="$(sed -n 's/^\*\*Current deployment reviewer\*\*: //p' "$review_file")"
+  review_date="$(sed -n 's/^\*\*Current deployment review date\*\*: //p' "$review_file")"
+  approval="$(sed -n 's/^\*\*Current approval to provision billable AWS resources\*\*: //p' "$review_file")"
+  [[ -n "$reviewer" && "$reviewer" != "_Not reviewed_" &&
+    "$reviewer" != "Operator (confirmed in chat)" ]] || return 1
+  [[ "$review_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ && "$review_date" != "2026-11-04" ]] || return 1
+  [[ "$approval" == "Granted for this deployment on $review_date" ]] || return 1
   return 0
 }
 
@@ -86,15 +103,29 @@ demo_image_source_matches_checkout() {
     package-lock.json \
     scripts/compose-import.sh \
     scripts/import-data.ts \
-    tsconfig.json \
-    vite.config.ts \
-    web
+    tsconfig.json
+}
+
+demo_config_value() {
+  case "$1" in
+    DEMO_REGION) printf '%s' "${DEMO_REGION:-}" ;;
+    DEMO_SSH_CIDR) printf '%s' "${DEMO_SSH_CIDR:-}" ;;
+    DEMO_PUBLIC_KEY_PATH) printf '%s' "${DEMO_PUBLIC_KEY_PATH:-}" ;;
+    DEMO_GHCR_OWNER) printf '%s' "${DEMO_GHCR_OWNER:-}" ;;
+    PREPARED_DATA_DIR) printf '%s' "${PREPARED_DATA_DIR:-}" ;;
+    DEMO_IMAGE_TAG) printf '%s' "${DEMO_IMAGE_TAG:-}" ;;
+    DEMO_ESTIMATED_COST_USD) printf '%s' "${DEMO_ESTIMATED_COST_USD:-}" ;;
+    DEMO_BUDGET_LIMIT_USD) printf '%s' "${DEMO_BUDGET_LIMIT_USD:-}" ;;
+    DEMO_BUDGET_EMAIL) printf '%s' "${DEMO_BUDGET_EMAIL:-}" ;;
+    *) return 1 ;;
+  esac
 }
 
 demo_validate_configuration() {
-  local required
+  local required value
   for required in DEMO_REGION DEMO_SSH_CIDR DEMO_PUBLIC_KEY_PATH DEMO_GHCR_OWNER PREPARED_DATA_DIR DEMO_IMAGE_TAG DEMO_ESTIMATED_COST_USD DEMO_BUDGET_LIMIT_USD DEMO_BUDGET_EMAIL; do
-    if [[ -z "${!required:-}" ]]; then
+    value="$(demo_config_value "$required")"
+    if [[ -z "$value" ]]; then
       demo_error "required setting $required is missing from .env.demo"
       return 1
     fi
@@ -133,7 +164,7 @@ demo_validate_configuration() {
     return 1
   fi
   local file
-  for file in recipes.csv ingredients.csv recipe_ingredients.csv ingredient_aliases.csv ingredient_categories.csv recipe_cuisines.csv; do
+  for file in recipes.csv ratings.csv ingredients.csv recipe_ingredients.csv ingredient_aliases.csv ingredient_categories.csv recipe_cuisines.csv; do
     if [[ ! -r "$PREPARED_DATA_DIR/$file" ]]; then
       demo_error "prepared data file is missing: $PREPARED_DATA_DIR/$file"
       return 1
@@ -146,7 +177,7 @@ demo_validate_configuration() {
   fi
 
   if ! demo_review_is_complete; then
-    demo_error "complete docs/demo-security-review.md and record reviewer, date, and approval before any cloud changes"
+    demo_error "complete the Demo security review gate in README.md and record reviewer, date, and approval before any cloud changes"
     return 1
   fi
 }

@@ -42,12 +42,6 @@ export interface RecipeDetail {
   };
 }
 
-export interface RecipeSearchRepository {
-  getCuisineNames(): Promise<readonly string[]>;
-  search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage>;
-  getRecipeDetail(id: string): Promise<RecipeDetail | null>;
-}
-
 export function mapRecipeSearchResult(
   recipe: RecipeSearchRecord,
   criteria: Pick<RecipeSearchCriteria, "included" | "excluded">,

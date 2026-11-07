@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Lets users find and browse recipes based on editable ingredient criteria, with transparent ranking, time limits, and results that can be loaded continuously.
+Provides API search and recipe-detail behavior for ingredient criteria, transparent ranking, time limits, and cursor-based result pages.
 
 ## Requirements
 
@@ -84,34 +84,12 @@ The system SHALL allow users to show recipes up to 15, 30, or 60 minutes, or cho
 - **WHEN** the user selects Any time
 - **THEN** recipes with unknown cooking time remain eligible for results
 
-### Requirement: Display useful recipe details
-The system SHALL show each result's recipe title, cooking time when known, matched and excluded ingredients, and missing ingredients.
+### Requirement: Include criterion details in search results
+The API SHALL return each result's recipe ID, name, optional cooking time, matched and excluded ingredients, and missing ingredients.
 
-#### Scenario: Display a recipe result
-- **WHEN** a recipe is shown in search results
-- **THEN** its title, available cooking time, matched included ingredients, excluded ingredients it contains, and missing ingredients are visible
-
-### Requirement: Browse results continuously
-The user interface SHALL load additional cursor pages as the user reaches the end of the current results and communicate loading, empty, and failure states.
-
-#### Scenario: Reach the end of a result page
-- **WHEN** the user scrolls to the end of a page and another cursor is available
-- **THEN** the next page is loaded and appended without duplicating existing recipes
-
-#### Scenario: No recipes match the search
-- **WHEN** a completed search returns no recipes
-- **THEN** the interface communicates that there are no matching recipes
-
-#### Scenario: Search fails
-- **WHEN** a recipe search request fails
-- **THEN** the interface communicates the failure and provides a way to retry
-
-### Requirement: Credit recipe results without contributor identities
-The results interface SHALL retain visible credit to the Food.com recipe dataset and SHALL NOT display contributor identities.
-
-#### Scenario: View recipe results
-- **WHEN** recipe results are displayed
-- **THEN** the dataset source is credited and no recipe contributor identity is shown
+#### Scenario: Return a recipe search result
+- **WHEN** a recipe is included in a search response
+- **THEN** the response contains its ID, name, available cooking time, matched included ingredients, excluded ingredients it contains, and missing ingredients
 
 ### Requirement: Return the total number of matching recipes
 The recipe-search response SHALL include the total number of recipes eligible for the submitted search after filter rules and before cursor pagination is applied.
@@ -132,28 +110,21 @@ The recipe-search response SHALL include the total number of recipes eligible fo
 - **WHEN** no recipes match the submitted criteria
 - **THEN** the response includes a total match count of zero
 
-### Requirement: Present recipe results in a responsive results area
-The results interface SHALL present the matching-recipe count and recipe cards in a visually distinct area that adapts to the available viewport width.
+### Requirement: Retrieve recipe details without contributor identities
+The API SHALL return available recipe details and anonymous source-rating values without exposing contributor or rater identities.
 
-#### Scenario: View results on a wide screen
-- **WHEN** a user views recipe results on a wide screen
-- **THEN** the result count and recipe cards appear beside the ingredient search and filter panel
+#### Scenario: Retrieve a recipe with details and ratings
+- **WHEN** a client requests an existing recipe
+- **THEN** the API returns its ID, name, optional cooking time and instructions, ingredients, cuisines, and available anonymous ratings
 
-#### Scenario: View results on a narrow screen
-- **WHEN** the available viewport is too narrow for side-by-side search and results
-- **THEN** the results area reflows without horizontal page overflow and remains usable after the search and filter panel
+#### Scenario: Prefer individual source ratings
+- **WHEN** individual source-rating records are available
+- **THEN** the API returns those numeric values and does not substitute the aggregate rating
 
-#### Scenario: Show recipe details in a result card
-- **WHEN** a recipe appears in the results area
-- **THEN** its name, available cooking time, matched ingredients, missing ingredients, and any excluded ingredients it contains remain visible in the designed card
+#### Scenario: Use aggregate rating when individual values are unavailable
+- **WHEN** no individual source-rating records are available and an aggregate rating exists
+- **THEN** the API returns the aggregate rating without any rater identity
 
-### Requirement: Provide light and dark recipe-search themes
-The recipe-search interface SHALL provide coordinated light and dark themes and a keyboard-operable control that lets the user switch between them.
-
-#### Scenario: Switch between themes
-- **WHEN** a user activates the theme control
-- **THEN** the page, search panel, results, cards, text, controls, and status messages use the selected light or dark theme
-
-#### Scenario: Operate the theme control with a keyboard
-- **WHEN** a keyboard user focuses and activates the theme control
-- **THEN** the selected theme changes and the control communicates its accessible name and current action
+#### Scenario: Request an unknown recipe
+- **WHEN** a client requests a recipe ID that is not present
+- **THEN** the API returns an explicit not-found response

@@ -4,13 +4,13 @@ import type { Driver } from "neo4j-driver";
 import request from "supertest";
 
 import { createApiApp } from "../api/src/app.js";
-import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/neo4j-recipe-search-repository.js";
+import { Neo4jRecipeSearchRepository } from "../api/src/features/recipes/adapters/neo4j-recipe-search-repository.js";
 import type {
   RecipeDetail,
   RecipeSearchPage,
-  RecipeSearchRepository,
 } from "../api/src/features/recipes/recipe-search-types.js";
-import type { IngredientRepository } from "../api/src/features/ingredients/ingredient-repository.js";
+import type { IngredientRepository } from "../api/src/features/ingredients/ports/ingredient-repository.js";
+import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
 
 class TestIngredientRepository implements IngredientRepository {
   async getIngredientNames() {

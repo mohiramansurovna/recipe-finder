@@ -6,9 +6,9 @@ import { InvalidRecipeSearchCursorError } from "../api/src/features/recipes/reci
 import type {
   RecipeSearchCriteria,
   RecipeSearchPage,
-  RecipeSearchRepository,
 } from "../api/src/features/recipes/recipe-search-types.js";
-import type { IngredientRepository } from "../api/src/features/ingredients/ingredient-repository.js";
+import type { IngredientRepository } from "../api/src/features/ingredients/ports/ingredient-repository.js";
+import type { RecipeSearchRepository } from "../api/src/features/recipes/ports/recipe-search-repository.js";
 
 class TestIngredientRepository implements IngredientRepository {
   async getIngredientNames() {

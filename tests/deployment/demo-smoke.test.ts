@@ -28,17 +28,24 @@ function makeCurlStub(response: string) {
   const curlPath = join(bin, "curl");
   writeFileSync(
     curlPath,
-    `#!/bin/sh\ncase "$*" in\n  *"/api/recipes/search") printf '%s' "$MOCK_SEARCH_RESPONSE" ;;\n  *) printf '<html>Recipe Graph</html>' ;;\nesac\n`,
+    `#!/bin/sh\ncase "$*" in\n  *"/api/recipes/search") printf '%s' "$MOCK_SEARCH_RESPONSE" ;;\n  *"/health") printf '{"status":"ok"}' ;;\n  *) exit 1 ;;\nesac\n`,
   );
   chmodSync(curlPath, 0o755);
   return { directory, path: `${bin}${delimiter}${process.env.PATH ?? ""}`, response };
 }
 
 describe("public demo smoke check", () => {
-  it("accepts a valid HTTPS response containing recipe results", () => {
+  it("checks API health and accepts a valid HTTPS search response", () => {
     const mock = makeCurlStub(
       JSON.stringify({
-        recipes: [{ id: "1", name: "Chicken" }],
+        recipes: [{
+          id: "1",
+          name: "Chicken",
+          minutes: 30,
+          matchedIngredients: ["chicken"],
+          missingIngredients: ["salt"],
+          excludedIngredients: [],
+        }],
         totalCount: 1,
         nextCursor: null,
       }),
@@ -79,6 +86,31 @@ describe("public demo smoke check", () => {
     );
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Recipe search returned no matching recipes");
+  });
+
+  it("rejects non-empty search results with malformed recipe objects", () => {
+    const mock = makeCurlStub(
+      JSON.stringify({
+        recipes: [{}],
+        totalCount: 1,
+        nextCursor: null,
+      }),
+    );
+    const result = spawnSync(
+      "bash",
+      [resolve(root, "scripts/demo-smoke.sh"), "https://demo.example.test"],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: mock.path,
+          MOCK_SEARCH_RESPONSE: mock.response,
+        },
+      },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("malformed recipe");
   });
 
   it("rejects a non-HTTPS URL", () => {

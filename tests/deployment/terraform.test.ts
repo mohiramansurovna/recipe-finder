@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
-const terraformDirectory = resolve(root, "infra/terraform");
+const terraformDirectory = resolve(root, "infra");
 const main = readFileSync(resolve(terraformDirectory, "main.tf"), "utf8");
 const userData = readFileSync(
   resolve(terraformDirectory, "user-data.sh.tftpl"),
@@ -21,7 +21,7 @@ const demoCompose = readFileSync(
 );
 
 describe("demo infrastructure contracts", () => {
-  it("allows only web traffic and the operator's SSH /32", () => {
+  it("allows only HTTPS ingress and the operator's SSH /32", () => {
     expect(main).toContain('from_port   = 80');
     expect(main).toContain('from_port   = 443');
     expect(main).toContain('from_port   = 22');
@@ -58,7 +58,7 @@ describe("demo infrastructure contracts", () => {
   it("passes terraform formatting validation", () => {
     const result = spawnSync(
       "terraform",
-      ["-chdir=infra/terraform", "fmt", "-check", "-recursive"],
+      ["-chdir=infra", "fmt", "-check", "-recursive"],
       { cwd: root, encoding: "utf8" },
     );
     expect(result.status, result.stderr || result.stdout).toBe(0);
