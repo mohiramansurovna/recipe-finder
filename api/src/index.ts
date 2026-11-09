@@ -46,8 +46,11 @@ async function main() {
     passwordHasher: new Argon2PasswordHasher(),
     mailer: new ResendVerificationMailer(environment.RESEND_API_KEY, environment.EMAIL_FROM),
     verificationSecret: environment.VERIFICATION_CODE_SECRET,
-    onResendDeliveryFailure: (challengeId) => {
-      console.error("Verification email delivery failed.", { challengeId });
+    onResendDeliveryFailure: (challengeId, error) => {
+      console.error("Verification email delivery failed.", {
+        challengeId,
+        reason: error instanceof Error ? error.message : "Unknown delivery error",
+      });
     },
   });
   try {

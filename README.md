@@ -60,7 +60,9 @@ checks the graph-level recipe import marker and recipe constraints; the separate
 Compose import marker is not used as proof of graph readiness. Set `RESEND_API_KEY`,
 `EMAIL_FROM` (a verified Resend sender address), and a random
 `VERIFICATION_CODE_SECRET` of at least 32 characters in `.env` before starting
-Compose. The same email settings are required by the demo deployment.
+Compose. Keep the verification secret stable across restarts and API instances:
+rotating it invalidates outstanding codes and resets the effective per-IP
+issuance quota. The same email settings are required by the demo deployment.
 
 Graphs imported by an earlier release do not yet have the graph-level completion
 record. Rebuild such a graph from prepared data before upgrading; for local
@@ -82,10 +84,24 @@ another loopback port.
 - Resend verification: `POST http://localhost:8080/api/accounts/resend-verification`
 
 Registration accepts `{ "email": "...", "username": "...", "password": "..." }`.
-Verification accepts `{ "email": "...", "code": "12345678" }`; resend accepts
-`{ "email": "..." }`. Verification emails are sent only after account and
-challenge state has committed. A failed initial delivery returns an explicit
-error while leaving the account eligible for the non-enumerating resend flow.
+Email is trimmed and case-folded; usernames are case-folded and must contain
+3–30 ASCII letters, numbers, or underscores. Passwords must be at least 12
+characters. A successful registration returns `201`; invalid input returns
+`400 INVALID_REQUEST`, duplicates return `409 ACCOUNT_ALREADY_EXISTS`, and
+issuance limits return `429 RATE_LIMITED`.
+
+Verification accepts `{ "email": "...", "code": "12345678" }`; codes expire
+after 24 hours and become unusable after five failed attempts. Success returns
+`200`; invalid, expired, reused, or exhausted codes return
+`400 INVALID_VERIFICATION_CODE`.
+
+Resend accepts `{ "email": "..." }` and returns `202` with the same response for
+known, unknown, and rate-limited addresses. Initial sends and resends share
+limits of 3 per account and 10 per source IP in a rolling hour. Verification
+emails are sent only after account and challenge state has committed. A failed
+initial delivery returns `503 EMAIL_DELIVERY_FAILED` while leaving the account
+eligible for the non-enumerating resend flow; resend delivery failures are
+reported internally without changing the public response.
 
 Example search request:
 

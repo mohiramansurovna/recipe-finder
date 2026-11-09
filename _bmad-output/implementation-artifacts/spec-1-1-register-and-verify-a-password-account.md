@@ -65,7 +65,8 @@ context:
 - Given duplicate email or username, including a concurrent uniqueness race, when registration is attempted, then an explicit safe duplicate result is returned without creating another account or sending another code.
 - Given a verification code, when submitted, then only the current unused, unexpired challenge with fewer than five prior failed attempts can verify the account; consumption and failed-attempt updates are atomic.
 - Given a resend request for a known or unknown email, when processed, then both receive the same public response, a replacement invalidates the earlier challenge, and initial registration sends plus resends are limited to 3 per account and 10 per source IP in any rolling hour.
-- Given email delivery fails after persistence, when registration or resend completes, then the API reports failure explicitly and the account remains recoverable through the non-enumerating resend flow.
+- Given initial registration email delivery fails after persistence, when registration completes, then the API reports the failure explicitly and the account remains recoverable through the non-enumerating resend flow.
+- Given resend email delivery fails after persistence, when resend completes, then the public response remains identical for known and unknown emails, the failure is recorded through internal monitoring, and the account remains recoverable through the non-enumerating resend flow.
 - Given importer completion and a clean graph, when startup proceeds, then the separate idempotent migration verifies graph-level import completion and required recipe schema, creates account constraints, and gates API readiness in both Compose deployments.
 - Given existing recipe API requests, when account routes and readiness are added, then their contracts and behavior remain unchanged and relevant account, migration, privacy, error, and regression tests pass.
 
@@ -75,11 +76,27 @@ The existing `/health` route is used by deployment health checks. Preserve its p
 
 ## Spec Change Log
 
+- 2026-11-09: User clarified that resend non-enumeration takes priority over public delivery-failure errors; resend failures are reported internally. Initial registration delivery failures remain explicit.
+
 ## Review Triage Log
+
+- **false — architecture status:** The architecture text explicitly identifies itself as a target design, not an implementation-status report, so its future-tense account description is not stale status.
+- **false — source-rating count mismatch:** The audit distinguishes 231,636 prepared recipes from the source audit's 231,637 raw recipes; those are different populations, not conflicting totals.
+- **false — story/sprint status mismatch:** `in-review` tracks the story artifact's review phase while `in-progress` remains the sprint tracker state until the build workflow completes.
+- **low / defer — source-audit reproducibility:** The source audit gives counts and a high-level join but no snapshot identifier or reproducible method; adding provenance needs the local source details and is unrelated to this account-registration story.
+- **low / patch — registration constraints documentation:** The README omitted username and password constraints, so API consumers could submit requests that the route rejects; the account section now documents both.
+- **low / patch — verification retry documentation:** The README omitted code expiry and the failed-attempt limit, which affect when clients need a replacement code; both limits are now documented.
+- **low / patch — account response documentation:** The README omitted endpoint success and error contracts; registration and verification status codes, response/error codes, and resend's `202` response are now documented.
+- **low / patch — resend privacy documentation:** The README used “non-enumerating” without specifying the identical response for known, unknown, and rate-limited addresses; it now documents the exact behavior.
+- **low / patch — issuance limit documentation:** The README omitted the shared account/IP rolling-hour caps; both are now documented, including the uniform resend response under rate limiting.
+- **low / patch — verification-secret operations:** The README did not warn that secret rotation invalidates active codes and resets effective per-IP quota keys; it now tells operators to keep the value stable and describes rotation effects.
+- **low / patch — Argon2id parameter coverage:** The implementation uses the specified `m=19456,t=2,p=1` parameters, but its test only asserted Argon2id format; the test now pins the required encoded costs.
+- **false — concurrent issuance test coverage:** The configured Neo4j integration test already sends 11 concurrent registrations sharing one IP and asserts exactly 10 issuances; it was skipped here only because no Neo4j test environment was configured, as already noted in verification.
+- **medium / patch — account-bound verification hashes:** Code hashes were keyed only by the numeric code, so a rare collision across accounts could let a code delivered for one address verify another address; hashes now include the normalized email context, with a regression test.
 
 ## Design Notes
 
-Registration and the first verification message have different commit boundaries: first commit the account and hashed challenge, then call Resend. A delivery failure must not roll back committed identity state or appear successful; the non-enumerating resend path is the recovery mechanism. No database write transaction may contain an external provider call.
+Registration and the first verification message have different commit boundaries: first commit the account and hashed challenge, then call Resend. A failed initial delivery is returned explicitly; a resend delivery failure is recorded internally without changing the non-enumerating public response. Neither failure rolls back committed identity state, and the resend path is the recovery mechanism. No database write transaction may contain an external provider call.
 
 ## Verification
 

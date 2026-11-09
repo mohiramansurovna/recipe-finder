@@ -30,11 +30,13 @@ export interface AccountServiceOptions {
     verificationSecret: string;
     now?: () => number;
     createCode?: () => string;
-    onResendDeliveryFailure?: (challengeId: string) => void;
+    onResendDeliveryFailure?: (challengeId: string, error: unknown) => void;
 }
 
-export function hashVerificationCode(secret: string, code: string): string {
-    return createHmac('sha256', secret).update(`verification-code:${code}`).digest('hex');
+export function hashVerificationCode(secret: string, email: string, code: string): string {
+    return createHmac('sha256', secret)
+        .update(JSON.stringify(['verification-code', email.toLowerCase(), code]))
+        .digest('hex');
 }
 
 export function hashSourceIp(secret: string, ip: string): string {
@@ -66,7 +68,7 @@ export class AccountsService {
             email: input.email,
             username: input.username,
             passwordHash,
-            codeHash: hashVerificationCode(this.options.verificationSecret, code),
+            codeHash: hashVerificationCode(this.options.verificationSecret, input.email, code),
             codeExpiresAt: now + 24 * 60 * 60 * 1000,
             now,
             accountRateKey: accountId,
@@ -76,8 +78,8 @@ export class AccountsService {
         if (result !== 'created') return result;
         try {
             await this.options.mailer.sendVerificationEmail(input.email, code, challengeId);
-        } catch {
-            throw new VerificationEmailDeliveryError();
+        } catch (error) {
+            throw new VerificationEmailDeliveryError({ cause: error });
         }
         return result;
     }
@@ -85,7 +87,7 @@ export class AccountsService {
     async verify(email: string, code: string): Promise<void> {
         const verified = await this.options.repository.verify({
             email,
-            codeHash: hashVerificationCode(this.options.verificationSecret, code),
+            codeHash: hashVerificationCode(this.options.verificationSecret, email, code),
             now: this.now(),
         });
         if (!verified) {
@@ -100,7 +102,7 @@ export class AccountsService {
         const result = await this.options.repository.resendVerification({
             challengeId,
             email,
-            codeHash: hashVerificationCode(this.options.verificationSecret, code),
+            codeHash: hashVerificationCode(this.options.verificationSecret, email, code),
             codeExpiresAt: now + 24 * 60 * 60 * 1000,
             now,
             ipRateKey: hashSourceIp(this.options.verificationSecret, sourceIp),
@@ -109,9 +111,9 @@ export class AccountsService {
 
         try {
             await this.options.mailer.sendVerificationEmail(email, code, challengeId);
-        } catch {
+        } catch (error) {
             try {
-                this.options.onResendDeliveryFailure?.(challengeId);
+                this.options.onResendDeliveryFailure?.(challengeId, error);
             } catch {
                 // Keep delivery diagnostics from changing the non-enumerating response.
             }

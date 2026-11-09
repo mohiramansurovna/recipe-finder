@@ -113,6 +113,7 @@ describe('account registration API', () => {
             passwordHash: 'hash:15',
             codeHash: hashVerificationCode(
                 'a-secret-for-verification-tests-that-is-long-enough',
+                'cook@example.com',
                 '01234567',
             ),
             codeExpiresAt: 1_800_000_000_000 + 24 * 60 * 60 * 1000,
@@ -120,6 +121,16 @@ describe('account registration API', () => {
         expect(repository.registrations[0]?.passwordHash).not.toContain(credentials.password);
         expect(mailer.deliveries).toHaveLength(1);
         expect(mailer.deliveries[0]).toMatchObject({ email: 'cook@example.com', code: '01234567' });
+    });
+
+    it('binds verification-code hashes to the normalized account email', () => {
+        const secret = 'a-secret-for-verification-tests-that-is-long-enough';
+        expect(hashVerificationCode(secret, 'Cook@Example.com', '01234567')).toBe(
+            hashVerificationCode(secret, 'cook@example.com', '01234567'),
+        );
+        expect(hashVerificationCode(secret, 'other@example.com', '01234567')).not.toBe(
+            hashVerificationCode(secret, 'cook@example.com', '01234567'),
+        );
     });
 
     it.each([
@@ -171,6 +182,30 @@ describe('account registration API', () => {
         expect(repository.committed).toBe(true);
     });
 
+    it('forwards unexpected registration failures to the central error logger', async () => {
+        const repository = new TestAccountsRepository();
+        const failure = new Error('Neo4j unavailable');
+        vi.spyOn(repository, 'register').mockRejectedValue(failure);
+        const { app } = createTestApp(repository);
+        const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        try {
+            await request(app)
+                .post('/api/accounts/register')
+                .send(credentials)
+                .expect(500)
+                .expect({
+                    error: {
+                        code: 'INTERNAL_ERROR',
+                        message: 'The request could not be completed.',
+                    },
+                });
+            expect(log).toHaveBeenCalledWith('Unhandled API request error:', failure);
+        } finally {
+            log.mockRestore();
+        }
+    });
+
     it('maps invalid verification codes to a safe client error', async () => {
         const repository = new TestAccountsRepository();
         repository.verificationResult = false;
@@ -198,6 +233,7 @@ describe('account registration API', () => {
         expect(repository.verifications[0]?.codeHash).toBe(
             hashVerificationCode(
                 'a-secret-for-verification-tests-that-is-long-enough',
+                'cook@example.com',
                 '01234567',
             ),
         );
@@ -247,7 +283,7 @@ describe('account registration API', () => {
         expect(response.body).toEqual({
             message: 'If the account is eligible, a verification email will be sent.',
         });
-        expect(onFailure).toHaveBeenCalledWith(repository.resends[0]?.challengeId);
+        expect(onFailure).toHaveBeenCalledWith(repository.resends[0]?.challengeId, mailer.failure);
         expect(JSON.stringify(response.body)).not.toContain('01234567');
     });
 
@@ -299,7 +335,7 @@ describe('Argon2id password hashing', () => {
     it('stores an Argon2id hash instead of the raw password', async () => {
         const password = 'correct-horse-battery-staple';
         const hash = await new Argon2PasswordHasher().hash(password);
-        expect(hash).toMatch(/^\$argon2id\$/u);
+        expect(hash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1\$/u);
         expect(hash).not.toContain(password);
     });
 });

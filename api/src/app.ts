@@ -26,7 +26,8 @@ export function createApiApp(
         try {
             await readinessCheck?.();
             response.json({ status: 'ok' });
-        } catch {
+        } catch (error) {
+            console.error('API readiness check failed:', error);
             response.status(503).json({ status: 'error' });
         }
     });
