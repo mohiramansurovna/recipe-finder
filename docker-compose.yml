@@ -42,10 +42,12 @@ services:
       - "${PREPARED_DATA_DIR:-./data/prepared}:/app/data/prepared:ro"
       - import_state:/app/.compose-state
 
-  api:
+  account-migration:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: Dockerfile
+    entrypoint: ["npm", "run", "migrate:accounts"]
+    command: []
     depends_on:
       importer:
         condition: service_completed_successfully
@@ -54,6 +56,23 @@ services:
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}"
       NEO4J_DATABASE: "${NEO4J_DATABASE:-neo4j}"
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    depends_on:
+      account-migration:
+        condition: service_completed_successfully
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}"
+      NEO4J_DATABASE: "${NEO4J_DATABASE:-neo4j}"
+      RESEND_API_KEY: "${RESEND_API_KEY:?Set RESEND_API_KEY in .env}"
+      VERIFICATION_CODE_SECRET: "${VERIFICATION_CODE_SECRET:?Set VERIFICATION_CODE_SECRET in .env}"
+      EMAIL_FROM: "${EMAIL_FROM:?Set EMAIL_FROM in .env}"
+      TRUST_PROXY_HOPS: "1"
 
   caddy:
     image: caddy:2-alpine

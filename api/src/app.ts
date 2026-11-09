@@ -4,6 +4,7 @@ import { rateLimit } from 'express-rate-limit';
 import { IngredientsService } from './application/services/ingredients.service.js';
 import type { IngredientsRepository } from './core/ingredients/ingredients.repository.js';
 import { RecipesService } from './application/services/recipes.service.js';
+import type { AccountsService } from './application/services/accounts.service.js';
 import type { RecipesRepository } from './core/recipes/recipes.repository.js';
 import { apiErrorHandler } from './interface/http/api-error.js';
 import { createApiRouter } from './interface/http/api-router.js';
@@ -11,14 +12,23 @@ import { createApiRouter } from './interface/http/api-router.js';
 export function createApiApp(
     ingredientRepository: IngredientsRepository,
     rateLimitMax = 100,
-    recipeSearchRepository?: RecipesRepository
+    recipeSearchRepository?: RecipesRepository,
+    accountsService?: AccountsService,
+    readinessCheck?: () => Promise<void>,
+    trustProxyHops = 0
 ) {
     const app = express();
+    if (trustProxyHops > 0) app.set('trust proxy', trustProxyHops);
     const ingredientService = new IngredientsService(ingredientRepository);
     const recipeService = new RecipesService(recipeSearchRepository);
 
-    app.get('/health', (_request, response) => {
-        response.json({ status: 'ok' });
+    app.get('/health', async (_request, response) => {
+        try {
+            await readinessCheck?.();
+            response.json({ status: 'ok' });
+        } catch {
+            response.status(503).json({ status: 'error' });
+        }
     });
     app.use(express.json({ limit: '16kb' }));
     app.use(
@@ -40,7 +50,7 @@ export function createApiApp(
             },
         })
     );
-    app.use('/api', createApiRouter(ingredientService, recipeService));
+    app.use('/api', createApiRouter(ingredientService, recipeService, accountsService));
     app.use(apiErrorHandler);
 
     return app;

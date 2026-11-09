@@ -627,6 +627,11 @@ export async function importPreparedData(
     await runBatched(recipeCuisineRows(dataDirectory), (batch) =>
       writeRecipeCuisineBatch(session, batch),
     );
+    await session.run(
+      `MERGE (metadata:RecipeGraphMetadata {key: 'recipe-import'})
+       SET metadata.completed = true,
+           metadata.completedAt = datetime()`,
+    );
   } finally {
     await Promise.all([session.close(), activeDriver.close()]);
   }

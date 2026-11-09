@@ -126,6 +126,9 @@ describe("demo launch safety gates", () => {
       "DEMO_ESTIMATED_COST_USD=1",
       "DEMO_BUDGET_LIMIT_USD=5",
       "DEMO_BUDGET_EMAIL=operator@example.com",
+      "RESEND_API_KEY=re_test",
+      "EMAIL_FROM=recipe@example.com",
+      "VERIFICATION_CODE_SECRET=12345678901234567890123456789012",
     ].join("\n"));
     const result = runBash(
       'DEMO_ROOT_DIR="$1"; DEMO_CONFIG_FILE="$1/.env.demo"; source "$2"; demo_read_config; demo_image_source_matches_checkout() { return 0; }; demo_review_is_complete() { return 0; }; demo_validate_configuration',
@@ -193,6 +196,9 @@ describe("demo launch safety gates", () => {
         "DEMO_ESTIMATED_COST_USD=1",
         "DEMO_BUDGET_LIMIT_USD=5",
         "DEMO_BUDGET_EMAIL=operator@example.com",
+        "RESEND_API_KEY=re_test",
+        "EMAIL_FROM=recipe@example.com",
+        "VERIFICATION_CODE_SECRET=12345678901234567890123456789012",
       ].join("\n"),
     );
     for (const file of [

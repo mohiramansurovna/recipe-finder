@@ -55,7 +55,18 @@ docker compose up --build
 Neo4j and Caddy bind to loopback; Neo4j is not publicly exposed. The importer
 waits for database readiness, refuses an unmarked non-empty graph, and records
 successful Compose imports so restarts do not re-import data. The API becomes
-available only after import succeeds:
+available only after import and the account-schema migration succeed. The migration
+checks the graph-level recipe import marker and recipe constraints; the separate
+Compose import marker is not used as proof of graph readiness. Set `RESEND_API_KEY`,
+`EMAIL_FROM` (a verified Resend sender address), and a random
+`VERIFICATION_CODE_SECRET` of at least 32 characters in `.env` before starting
+Compose. The same email settings are required by the demo deployment.
+
+Graphs imported by an earlier release do not yet have the graph-level completion
+record. Rebuild such a graph from prepared data before upgrading; for local
+development, `docker compose down -v` removes the graph and its import marker,
+after which `docker compose up --build` imports it again. This is destructive
+and should only be done when the graph can be recreated from the prepared data.
 
 The local ingress port defaults to `8080`. Set `APP_PORT` in `.env` to choose
 another loopback port.
@@ -66,6 +77,15 @@ another loopback port.
 - Parsing: `POST http://localhost:8080/api/ingredients/parse`
 - Search: `POST http://localhost:8080/api/recipes/search`
 - Details: `GET http://localhost:8080/api/recipes/<id>`
+- Register: `POST http://localhost:8080/api/accounts/register`
+- Verify: `POST http://localhost:8080/api/accounts/verify`
+- Resend verification: `POST http://localhost:8080/api/accounts/resend-verification`
+
+Registration accepts `{ "email": "...", "username": "...", "password": "..." }`.
+Verification accepts `{ "email": "...", "code": "12345678" }`; resend accepts
+`{ "email": "..." }`. Verification emails are sent only after account and
+challenge state has committed. A failed initial delivery returns an explicit
+error while leaving the account eligible for the non-enumerating resend flow.
 
 Example search request:
 
@@ -82,8 +102,8 @@ marker. To intentionally rebuild the graph from prepared CSVs, use
 graph and import marker.
 
 For host-side API development, set `NEO4J_URI=bolt://localhost:7687` in `.env`,
-start `docker compose up neo4j importer`, then run `npm run dev:api` in another
-terminal.
+start `docker compose up neo4j importer account-migration`, then run
+`npm run dev:api` in another terminal.
 
 ## Checks
 
@@ -115,9 +135,10 @@ the local private key matching the configured public key.
 
 Configure `.env.demo` from `.env.demo.example`, with the current public SSH
 address as a `/32`, a protected SSH key pair, public GHCR owner, prepared-data
-directory, full published image commit SHA, realistic cost estimate, budget
-limit, and notification email. Keep `.env.demo`, Terraform state/plans, keys,
-and data private. Run local checks before deployment:
+directory, full published image commit SHA, Resend API key, verified sender
+email, a random `VERIFICATION_CODE_SECRET` of at least 32 characters, realistic
+cost estimate, budget limit, and notification email. Keep `.env.demo`, Terraform
+state/plans, keys, and data private. Run local checks before deployment:
 
 After the first image publication, set both the importer and API GHCR packages
 to **Public** in GitHub package settings so the demo host can pull them without

@@ -151,6 +151,9 @@ main() {
 
   printf '%s\n' \
     "NEO4J_PASSWORD=$password" \
+    "RESEND_API_KEY=$RESEND_API_KEY" \
+    "EMAIL_FROM=$EMAIL_FROM" \
+    "VERIFICATION_CODE_SECRET=$VERIFICATION_CODE_SECRET" \
     "DEMO_HOSTNAME=$public_hostname" \
     "DEMO_IMAGE_TAG=$DEMO_IMAGE_TAG" \
     "DEMO_GHCR_OWNER=$DEMO_GHCR_OWNER" |

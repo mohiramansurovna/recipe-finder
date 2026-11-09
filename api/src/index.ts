@@ -6,6 +6,10 @@ import { z } from "zod";
 import { createApiApp } from "./app.js";
 import { Neo4jIngredientsRepository } from "./infrastructure/neo4j/repositories/ingredients.neo4j.repository.js";
 import { Neo4jRecipesRepository } from "./infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
+import { Neo4jAccountsRepository } from "./infrastructure/neo4j/repositories/accounts.neo4j.repository.js";
+import { Argon2PasswordHasher } from "./infrastructure/accounts/argon2-password-hasher.js";
+import { ResendVerificationMailer } from "./infrastructure/accounts/resend-verification-mailer.js";
+import { AccountsService } from "./application/services/accounts.service.js";
 
 const environmentSchema = z.object({
   NEO4J_URI: z.string().min(1).default("bolt://localhost:7687"),
@@ -13,6 +17,10 @@ const environmentSchema = z.object({
   NEO4J_PASSWORD: z.string().min(1),
   NEO4J_DATABASE: z.string().default("neo4j"),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  RESEND_API_KEY: z.string().trim().min(1),
+  VERIFICATION_CODE_SECRET: z.string().min(32),
+  EMAIL_FROM: z.string().email(),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
 });
 
 async function main() {
@@ -29,7 +37,33 @@ async function main() {
     driver,
     environment.NEO4J_DATABASE,
   );
-  const app = createApiApp(ingredientRepository, 100, recipeSearchRepository);
+  const accountsRepository = new Neo4jAccountsRepository(
+    driver,
+    environment.NEO4J_DATABASE,
+  );
+  const accountsService = new AccountsService({
+    repository: accountsRepository,
+    passwordHasher: new Argon2PasswordHasher(),
+    mailer: new ResendVerificationMailer(environment.RESEND_API_KEY, environment.EMAIL_FROM),
+    verificationSecret: environment.VERIFICATION_CODE_SECRET,
+    onResendDeliveryFailure: (challengeId) => {
+      console.error("Verification email delivery failed.", { challengeId });
+    },
+  });
+  try {
+    await accountsRepository.assertReady();
+  } catch (error) {
+    await driver.close();
+    throw error;
+  }
+  const app = createApiApp(
+    ingredientRepository,
+    100,
+    recipeSearchRepository,
+    accountsService,
+    () => accountsRepository.assertReady(),
+    environment.TRUST_PROXY_HOPS,
+  );
   const server = app.listen(environment.API_PORT, "0.0.0.0", () => {
     console.log(`Recipe Graph API listening on port ${environment.API_PORT}`);
   });
