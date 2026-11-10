@@ -15,7 +15,10 @@ describe('account migration deployment order', () => {
             const apiBlock = compose.slice(compose.indexOf('  api:'));
             expect(apiBlock).toContain('account-migration:');
             expect(apiBlock).toContain('condition: service_completed_successfully');
-            expect(compose).toContain('RESEND_API_KEY');
+            if (file === 'docker-compose.demo.yml') {
+                expect(apiBlock).toContain('EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER=resend in .env.demo}"');
+                expect(apiBlock).toContain('RESEND_API_KEY');
+            }
             expect(compose).toContain('VERIFICATION_CODE_SECRET');
             expect(compose).toContain('EMAIL_FROM');
         },

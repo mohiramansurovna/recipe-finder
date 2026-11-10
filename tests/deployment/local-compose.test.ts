@@ -13,6 +13,15 @@ describe("local Compose network boundaries", () => {
     expect(compose).toContain('"127.0.0.1:${APP_PORT:-8080}:80"');
   });
 
+  it("captures local email in Mailpit with loopback-only host ports", () => {
+    expect(compose).toContain("image: axllent/mailpit:");
+    expect(compose).toContain('"127.0.0.1:${MAILPIT_WEB_PORT:-8025}:8025"');
+    expect(compose).toContain('"127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"');
+    expect(compose).toContain("EMAIL_PROVIDER: \"${EMAIL_PROVIDER:?Set EMAIL_PROVIDER in .env}\"");
+    expect(compose).toContain("SMTP_HOST: mailpit");
+    expect(compose).not.toContain("RESEND_API_KEY");
+  });
+
   it("does not publish the API or Neo4j browser ports", () => {
     expect(compose).not.toMatch(/^\s+- ["']?0\.0\.0\.0:.*:(3000|7474|7473|7687):/m);
     expect(compose).not.toContain('"7474:7474"');

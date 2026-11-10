@@ -65,6 +65,7 @@ services:
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env.demo}"
       NEO4J_DATABASE: neo4j
+      EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER=resend in .env.demo}"
       RESEND_API_KEY: "${RESEND_API_KEY:?Set RESEND_API_KEY in .env.demo}"
       VERIFICATION_CODE_SECRET: "${VERIFICATION_CODE_SECRET:?Set VERIFICATION_CODE_SECRET in .env.demo}"
       EMAIL_FROM: "${EMAIL_FROM:?Set EMAIL_FROM in .env.demo}"

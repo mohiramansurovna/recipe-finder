@@ -57,12 +57,16 @@ waits for database readiness, refuses an unmarked non-empty graph, and records
 successful Compose imports so restarts do not re-import data. The API becomes
 available only after import and the account-schema migration succeed. The migration
 checks the graph-level recipe import marker and recipe constraints; the separate
-Compose import marker is not used as proof of graph readiness. Set `RESEND_API_KEY`,
-`EMAIL_FROM` (a verified Resend sender address), and a random
-`VERIFICATION_CODE_SECRET` of at least 32 characters in `.env` before starting
-Compose. Keep the verification secret stable across restarts and API instances:
+Compose import marker is not used as proof of graph readiness. Local Compose uses
+Mailpit for verification email: open `http://localhost:8025` to inspect messages.
+Mailpit's SMTP port and web inbox bind only to host loopback; the API connects to
+its internal `mailpit:1025` service. Local signup does not need Resend credentials
+or a verified sender domain. Set a random `VERIFICATION_CODE_SECRET` of at least
+32 characters in `.env` before starting Compose. Keep the verification secret stable across restarts and API instances:
 rotating it invalidates outstanding codes and resets the effective per-IP
-issuance quota. The same email settings are required by the demo deployment.
+issuance quota. The demo deployment remains explicitly configured for Resend and requires
+`EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and `EMAIL_FROM` set to a verified
+Resend sender address in `.env.demo`. Mailpit is not included in the demo stack.
 
 Graphs imported by an earlier release do not yet have the graph-level completion
 record. Rebuild such a graph from prepared data before upgrading; for local
@@ -117,8 +121,9 @@ marker. To intentionally rebuild the graph from prepared CSVs, use
 `docker compose down -v` and then start Compose again. This removes the local
 graph and import marker.
 
-For host-side API development, set `NEO4J_URI=bolt://localhost:7687` in `.env`,
-start `docker compose up neo4j importer account-migration`, then run
+For host-side API development, set `NEO4J_URI=bolt://localhost:7687` and
+`SMTP_HOST=localhost` in `.env`, start
+`docker compose up neo4j importer account-migration mailpit`, then run
 `npm run dev:api` in another terminal.
 
 ## Checks

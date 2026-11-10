@@ -25,4 +25,12 @@ describe("demo API-only deployment", () => {
     expect(workflow).toContain("recipe-finder-api");
     expect(workflow).not.toContain("recipe-finder-web");
   });
+
+  it("uses Resend explicitly and keeps development mail capture out of the demo", () => {
+    expect(compose).toContain('EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER=resend in .env.demo}"');
+    expect(compose).toContain("RESEND_API_KEY");
+    expect(compose).not.toMatch(/^\s{2}mailpit:/m);
+    expect(compose).not.toContain("SMTP_HOST");
+    expect(compose).not.toContain("SMTP_PORT");
+  });
 });

@@ -8,7 +8,7 @@ import { Neo4jIngredientsRepository } from "./infrastructure/neo4j/repositories/
 import { Neo4jRecipesRepository } from "./infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
 import { Neo4jAccountsRepository } from "./infrastructure/neo4j/repositories/accounts.neo4j.repository.js";
 import { Argon2PasswordHasher } from "./infrastructure/accounts/argon2-password-hasher.js";
-import { ResendVerificationMailer } from "./infrastructure/accounts/resend-verification-mailer.js";
+import { createVerificationMailer, emailEnvironmentSchema } from "./infrastructure/accounts/email-config.js";
 import { AccountsService } from "./application/services/accounts.service.js";
 
 const environmentSchema = z.object({
@@ -17,11 +17,9 @@ const environmentSchema = z.object({
   NEO4J_PASSWORD: z.string().min(1),
   NEO4J_DATABASE: z.string().default("neo4j"),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  RESEND_API_KEY: z.string().trim().min(1),
   VERIFICATION_CODE_SECRET: z.string().min(32),
-  EMAIL_FROM: z.string().email(),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
-});
+}).and(emailEnvironmentSchema);
 
 async function main() {
   const environment = environmentSchema.parse(process.env);
@@ -44,7 +42,7 @@ async function main() {
   const accountsService = new AccountsService({
     repository: accountsRepository,
     passwordHasher: new Argon2PasswordHasher(),
-    mailer: new ResendVerificationMailer(environment.RESEND_API_KEY, environment.EMAIL_FROM),
+    mailer: createVerificationMailer(environment),
     verificationSecret: environment.VERIFICATION_CODE_SECRET,
     onResendDeliveryFailure: (challengeId, error) => {
       console.error("Verification email delivery failed.", {

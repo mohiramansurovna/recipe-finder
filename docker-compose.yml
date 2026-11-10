@@ -1,6 +1,12 @@
 name: recipe-graph
 
 services:
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_WEB_PORT:-8025}:8025"
+
   neo4j:
     image: neo4j:5.26-community
     environment:
@@ -64,12 +70,16 @@ services:
     depends_on:
       account-migration:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
     environment:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}"
       NEO4J_DATABASE: "${NEO4J_DATABASE:-neo4j}"
-      RESEND_API_KEY: "${RESEND_API_KEY:?Set RESEND_API_KEY in .env}"
+      EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER in .env}"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
       VERIFICATION_CODE_SECRET: "${VERIFICATION_CODE_SECRET:?Set VERIFICATION_CODE_SECRET in .env}"
       EMAIL_FROM: "${EMAIL_FROM:?Set EMAIL_FROM in .env}"
       TRUST_PROXY_HOPS: "1"
