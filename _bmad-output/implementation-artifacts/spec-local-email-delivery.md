@@ -68,8 +68,9 @@ Email provider selection is required at API startup. Local Compose selects SMTP 
 ## Verification
 
 **Commands:**
-- `npm run check` -- passed: lint, type-check, and 170 tests; 2 graph-dependent tests skipped.
+- `npm run check` -- passed: lint, type-check, and 171 tests; 2 graph-dependent tests skipped.
 - `npm run build:api` -- passed: API build succeeds with the SMTP adapter and provider selection.
+- `npx vitest run tests/accounts-mailer.test.ts tests/deployment/local-compose.test.ts` -- passed: 9 tests, including SMTP endpoint wiring and Mailpit readiness dependency.
 - `docker compose --env-file .env.example config --quiet` with validation-only Neo4j and verification-secret values -- passed.
 - `docker compose -f docker-compose.demo.yml --env-file .env.demo.example config --quiet` with validation-only Resend, sender, Neo4j, and hostname values -- passed.
 - Mailpit SMTP smoke test -- passed: the adapter sent a message to Mailpit and its inbox API returned the expected recipient, subject, and body.
@@ -80,4 +81,5 @@ Email provider selection is required at API startup. Local Compose selects SMTP 
 
 ## Review Triage Log
 
-- No findings from direct review of the changed provider, deployment, documentation, and test code.
+- **low / patch — Mailpit startup readiness:** Compose originally waited only for the Mailpit container to start, not for its SMTP listener to become ready; the API now waits for the image's built-in health check, and the local Compose contract test pins that dependency.
+- **low / patch — SMTP endpoint test gap:** Provider selection tests verified the SMTP adapter type but not the Nodemailer host and port; added an assertion that the factory supplies the configured Mailpit host and port.

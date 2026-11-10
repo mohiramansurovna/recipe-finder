@@ -17,6 +17,7 @@ describe("local Compose network boundaries", () => {
     expect(compose).toContain("image: axllent/mailpit:");
     expect(compose).toContain('"127.0.0.1:${MAILPIT_WEB_PORT:-8025}:8025"');
     expect(compose).toContain('"127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"');
+    expect(compose).toContain("condition: service_healthy");
     expect(compose).toContain("EMAIL_PROVIDER: \"${EMAIL_PROVIDER:?Set EMAIL_PROVIDER in .env}\"");
     expect(compose).toContain("SMTP_HOST: mailpit");
     expect(compose).not.toContain("RESEND_API_KEY");

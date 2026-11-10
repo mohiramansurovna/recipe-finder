@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const { createTransport } = vi.hoisted(() => ({
+    createTransport: vi.fn(() => ({ sendMail: vi.fn() })),
+}));
+
+vi.mock('nodemailer', () => ({
+    default: { createTransport },
+}));
+
 import {
     createVerificationMailer,
     emailEnvironmentSchema,
@@ -18,6 +26,23 @@ describe('verification email provider configuration', () => {
         });
 
         expect(createVerificationMailer(environment)).toBeInstanceOf(SmtpVerificationMailer);
+    });
+
+    it('configures SMTP with the selected host and port', () => {
+        const environment = emailEnvironmentSchema.parse({
+            EMAIL_PROVIDER: 'smtp',
+            EMAIL_FROM: 'noreply@local.test',
+            SMTP_HOST: 'mailpit',
+            SMTP_PORT: '1025',
+        });
+
+        createVerificationMailer(environment);
+
+        expect(createTransport).toHaveBeenCalledWith({
+            host: 'mailpit',
+            port: 1025,
+            secure: false,
+        });
     });
 
     it('requires only Resend settings for the Resend provider', () => {
