@@ -1,7 +1,7 @@
 ---
 title: Recipe Graph Product Requirements
 status: final
-updated: 2026-11-07
+updated: 2026-11-09
 ---
 
 # Recipe Graph Product Requirements
@@ -98,6 +98,8 @@ The backend exposes a health endpoint, validates request shapes and filter value
 
 The temporary HTTPS demo publicly exposes unauthenticated API requests for demonstration only; it does not provide production access control. Once accounts ship, endpoints that read or change personal data (ratings, favorites, account, sessions) shall require authentication.
 
+Keep existing `/api` routes stable and make compatible additions for first-party clients. Introduce a new API version only when a change cannot remain backward-compatible.
+
 #### FR-10: Preserve explicit API behavior
 
 Invalid requests and cursors shall receive client errors; unavailable graph operations shall not be reported as successful results. The API shall apply rate limits and shall not expose database access publicly.
@@ -116,11 +118,11 @@ These capabilities are not implemented by the current backend and are the next w
 
 #### FR-13: Manage an account
 
-A person shall be able to create and use an account with an email address, username, and password. Email and username shall be unique. A password account shall be able to sign in only after its email address is verified (FR-17). If an email address already belongs to an account created with a different sign-in method, the API shall return an explicit error that names the existing method, and shall not link or merge accounts automatically.
+A person shall be able to create and use an account with an email address, username, and password. Email and username shall be unique. Passwords shall be at least 12 characters with no composition rules. A password account shall be able to sign in only after its email address is verified (FR-17). If an email address already belongs to an account created with a different sign-in method, the API shall return an explicit error that names the existing method, and shall not link or merge accounts automatically.
 
 #### FR-14: Manage private rating ownership
 
-An authenticated account holder shall be able to rate a recipe and delete their own rating. A person shall have at most one rating per recipe: submitting a rating for a recipe they already rated shall update the existing rating rather than add another or fail. A rating is a single number on the same scale as source ratings, shown like star ratings; it carries no text or comment. Any authenticated account holder may rate; there are no roles or additional permissions. The person's identity shall not be exposed with the rating to other users.
+An authenticated account holder shall be able to rate a recipe and delete their own rating. A person shall have at most one rating per recipe: submitting a rating for a recipe they already rated shall update the existing rating rather than add another or fail. A rating is a whole-number star value from 1 to 5; it carries no text or comment. Any authenticated account holder may rate; there are no roles or additional permissions. The person's identity shall not be exposed with the rating to other users. Account-specific rating reads and all rating changes require authentication; public recipe details remain available and may show combined rating aggregates and identity-free individual values.
 
 #### FR-15: Save and find favorites
 
@@ -132,23 +134,23 @@ When an account is deleted, the system shall remove its favorites, sessions, and
 
 #### FR-17: Verify email addresses
 
-The backend shall send a verification message to the email address of a new password account and mark the address verified only when the person completes the verification step. Verification credentials shall be single-use and expire. How the credential is delivered (link or code) is an open question (section 9).
+The backend shall send a verification message through Resend to the email address of a new password account and mark the address verified only when the person submits its valid, single-use, eight-digit code. Verification codes expire after 24 hours and allow at most five failed attempts. Only one code is active per account and purpose; resending invalidates the previous code. Initial registration sends and resends share rolling-hour limits of 3 per account and 10 per source IP.
 
 #### FR-18: Recover passwords by email
 
-A person who forgot their password shall be able to request recovery. The backend shall send a recovery message to the account's email address and allow a new password to be set only through a single-use, expiring credential. The response to a recovery request shall not reveal whether an email address has an account. Setting a new password shall end the account's existing sessions.
+A person who forgot their password shall be able to request recovery. The backend shall send an eight-digit, single-use recovery code through Resend to the account's email address; the code expires after one hour and allows at most five failed attempts. Only one code is active per account and purpose; resending invalidates the previous code. Code issuance shall be rate-limited per account and IP. A new password may be set only through a valid recovery code and shall follow the password policy in FR-13. The response to a recovery request shall not reveal whether an email address has an account. Setting a new password shall end the account's existing sessions.
 
 #### FR-19: Sign in with Google
 
-A person shall be able to create an account or sign in with Google. The backend shall verify the Google identity credential it receives from the client and shall not trust client-supplied identity claims. An address verified by Google shall not require a separate verification email. If the Google address already belongs to a password account, FR-13 applies: the API returns an explicit error naming the existing method instead of linking the accounts.
+A person shall be able to create an account or sign in with Google and shall choose a unique username after identity verification. The backend shall verify the Google identity credential it receives from the client, including its signature, audience, issuer, and expiry, and shall not trust client-supplied identity claims. Use Google's stable subject claim as the provider identity. Gmail addresses and verified Workspace addresses carrying the hosted-domain claim shall not require a separate verification email; other addresses shall be verified through Resend. If the Google address already belongs to a password account, FR-13 applies: the API returns an explicit error naming the existing method instead of linking the accounts.
 
 #### FR-20: Combine user and source ratings
 
-User ratings shall be added to the existing recipe ratings as a continuation of the source ratings, on the same scale. A recipe's individual ratings shall include its source ratings and user ratings, and any aggregate shall be computed over both, without exposing who authored a user rating. The scale and values of the source ratings shall be verified against the imported data before the user rating scale and validation are finalized.
+User ratings shall be added to the existing recipe ratings as a continuation of the source ratings, on the same 1-to-5 whole-number scale. A recipe's individual ratings shall include its anonymous source ratings and user ratings, and its aggregate shall be the arithmetic mean of all those individual values, weighted by their counts. Source value 0 means unrated and is excluded. Public recipe details may return the aggregate and identity-free individual values. No user identity shall be exposed with a rating.
 
 #### FR-21: Manage sessions across devices
 
-Signing in shall create a session for that device and issue a short-lived access token and a longer-lived refresh token. Refresh tokens shall rotate on use, and presenting a refresh token that was already rotated out shall end that session. A person shall be able to sign out of the current session, list their sessions with device name and last-used time, and end any other session, so that a terminated device can no longer obtain new access tokens. The server shall store refresh tokens only in hashed form. Token lifetimes and the allowed period of inactivity must be decided in BMAD requirements and architecture before implementation.
+Signing in shall create a session for that device and issue a 15-minute access token and a refresh token that expires 30 days after issuance. Refresh tokens shall rotate on use, with each replacement expiring 30 days after issuance; a session expires after 30 days without a successful refresh. Presenting a refresh token that was already rotated out shall end that session. A person shall be able to sign out of the current session, list their sessions with device name and last-used time, and end any other session, so that a terminated device can no longer obtain new access tokens. The server shall store refresh tokens only in hashed form.
 
 ### 4.6 Recommendations — future exploration
 
@@ -242,7 +244,7 @@ The backend base URL shall be configured per build type. Release builds shall us
 
 ### Next: account-backed backend
 
-Specify and implement, in order of dependency: accounts with email verification and password recovery, device sessions with access and refresh tokens, Sign in with Google, one rating per user per recipe combined with source ratings, favorites and “My Recipes,” and account deletion. Verify the source rating scale against the imported data first. The backend is considered complete when all of section 4.5 passes its tests.
+The source-rating audit confirmed individual whole-number ratings from 1 to 5; 0 means unrated. Combine source and user ratings by pooling individual values and computing a count-weighted arithmetic mean. Specify and implement, in order of dependency: accounts with email verification and password recovery, device sessions with access and refresh tokens, Sign in with Google, one rating per user per recipe combined with source ratings, favorites and “My Recipes,” and account deletion. The backend is considered complete when all of section 4.5 passes its tests.
 
 ### Then: Android client
 
@@ -279,10 +281,6 @@ Decide the basis for recommendations, and whether to add a session-management sc
 
 ## 9. Open questions
 
-1. How is a source aggregate combined with user ratings when a recipe has only an aggregate and no individual source values? Combining correctly needs the number of source ratings. What the actual source scale and values are (for example whether 0 occurs and whether values are whole numbers) must be checked in the data first.
-2. What lifetimes apply to access and refresh tokens, and how long may a session stay inactive before it expires?
-3. How are verification and recovery credentials delivered (links, codes, or both), through which email service, and, if links are used, how does the Android client open them?
-4. What recommendation inputs and ranking basis best serve the product?
-5. What minimum Android version, device types (phones only or tablets too), screen designs, and further accessibility requirements apply to the Android client?
-6. What dataset license attribution text and placement should the Android client use?
-7. What API compatibility and versioning guarantees will the backend need to provide for first-party mobile clients?
+1. What recommendation inputs and ranking basis best serve the product?
+2. What minimum Android version, device types (phones only or tablets too), screen designs, and further accessibility requirements apply to the Android client?
+3. What dataset license attribution text and placement should the Android client use?
