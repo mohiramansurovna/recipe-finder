@@ -23,7 +23,7 @@ demo_read_config() {
     key="${line%%=*}"
     value="${line#*=}"
     case "$key" in
-      DEMO_REGION|DEMO_SSH_CIDR|DEMO_PUBLIC_KEY_PATH|DEMO_GHCR_OWNER|PREPARED_DATA_DIR|DEMO_IMAGE_TAG|DEMO_ESTIMATED_COST_USD|DEMO_BUDGET_LIMIT_USD|DEMO_BUDGET_EMAIL|DEMO_INSTANCE_TYPE|RESEND_API_KEY|EMAIL_FROM|VERIFICATION_CODE_SECRET)
+      DEMO_REGION|DEMO_SSH_CIDR|DEMO_PUBLIC_KEY_PATH|DEMO_GHCR_OWNER|PREPARED_DATA_DIR|DEMO_IMAGE_TAG|DEMO_ESTIMATED_COST_USD|DEMO_BUDGET_LIMIT_USD|DEMO_BUDGET_EMAIL|DEMO_INSTANCE_TYPE|EMAIL_PROVIDER|RESEND_API_KEY|EMAIL_FROM|VERIFICATION_CODE_SECRET)
         ;;
       *)
         demo_error "unsupported setting '$key' in $config_file"
@@ -118,6 +118,7 @@ demo_config_value() {
     DEMO_ESTIMATED_COST_USD) printf '%s' "${DEMO_ESTIMATED_COST_USD:-}" ;;
     DEMO_BUDGET_LIMIT_USD) printf '%s' "${DEMO_BUDGET_LIMIT_USD:-}" ;;
     DEMO_BUDGET_EMAIL) printf '%s' "${DEMO_BUDGET_EMAIL:-}" ;;
+    EMAIL_PROVIDER) printf '%s' "${EMAIL_PROVIDER:-}" ;;
     RESEND_API_KEY) printf '%s' "${RESEND_API_KEY:-}" ;;
     EMAIL_FROM) printf '%s' "${EMAIL_FROM:-}" ;;
     VERIFICATION_CODE_SECRET) printf '%s' "${VERIFICATION_CODE_SECRET:-}" ;;
@@ -127,13 +128,18 @@ demo_config_value() {
 
 demo_validate_configuration() {
   local required value
-  for required in DEMO_REGION DEMO_SSH_CIDR DEMO_PUBLIC_KEY_PATH DEMO_GHCR_OWNER PREPARED_DATA_DIR DEMO_IMAGE_TAG DEMO_ESTIMATED_COST_USD DEMO_BUDGET_LIMIT_USD DEMO_BUDGET_EMAIL RESEND_API_KEY EMAIL_FROM VERIFICATION_CODE_SECRET; do
+  for required in DEMO_REGION DEMO_SSH_CIDR DEMO_PUBLIC_KEY_PATH DEMO_GHCR_OWNER PREPARED_DATA_DIR DEMO_IMAGE_TAG DEMO_ESTIMATED_COST_USD DEMO_BUDGET_LIMIT_USD DEMO_BUDGET_EMAIL EMAIL_PROVIDER RESEND_API_KEY EMAIL_FROM VERIFICATION_CODE_SECRET; do
     value="$(demo_config_value "$required")"
     if [[ -z "$value" ]]; then
       demo_error "required setting $required is missing from .env.demo"
       return 1
     fi
   done
+
+  if [[ "$EMAIL_PROVIDER" != "resend" ]]; then
+    demo_error "EMAIL_PROVIDER must be resend for the demo deployment"
+    return 1
+  fi
 
   if ! demo_validate_public_ipv4_cidr "$DEMO_SSH_CIDR"; then
     demo_error "DEMO_SSH_CIDR must be one routable public IPv4 address with a /32 mask"

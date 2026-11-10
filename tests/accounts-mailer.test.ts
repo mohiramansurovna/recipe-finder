@@ -22,7 +22,6 @@ describe('verification email provider configuration', () => {
             EMAIL_FROM: 'noreply@local.test',
             SMTP_HOST: 'mailpit',
             SMTP_PORT: '1025',
-            RESEND_API_KEY: '',
         });
 
         expect(createVerificationMailer(environment)).toBeInstanceOf(SmtpVerificationMailer);
@@ -42,6 +41,9 @@ describe('verification email provider configuration', () => {
             host: 'mailpit',
             port: 1025,
             secure: false,
+            connectionTimeout: 10_000,
+            greetingTimeout: 10_000,
+            socketTimeout: 10_000,
         });
     });
 
@@ -57,7 +59,7 @@ describe('verification email provider configuration', () => {
         expect(createVerificationMailer(environment)).toBeInstanceOf(ResendVerificationMailer);
     });
 
-    it('rejects missing selected-provider configuration and mismatched SMTP credentials', () => {
+    it('rejects missing selected-provider configuration and unsupported SMTP settings', () => {
         expect(
             emailEnvironmentSchema.safeParse({
                 EMAIL_PROVIDER: 'smtp',

@@ -126,6 +126,7 @@ describe("demo launch safety gates", () => {
       "DEMO_ESTIMATED_COST_USD=1",
       "DEMO_BUDGET_LIMIT_USD=5",
       "DEMO_BUDGET_EMAIL=operator@example.com",
+      "EMAIL_PROVIDER=resend",
       "RESEND_API_KEY=re_test",
       "EMAIL_FROM=recipe@example.com",
       "VERIFICATION_CODE_SECRET=12345678901234567890123456789012",
@@ -196,6 +197,7 @@ describe("demo launch safety gates", () => {
         "DEMO_ESTIMATED_COST_USD=1",
         "DEMO_BUDGET_LIMIT_USD=5",
         "DEMO_BUDGET_EMAIL=operator@example.com",
+        "EMAIL_PROVIDER=resend",
         "RESEND_API_KEY=re_test",
         "EMAIL_FROM=recipe@example.com",
         "VERIFICATION_CODE_SECRET=12345678901234567890123456789012",
@@ -320,6 +322,7 @@ esac
   it("writes the deployment environment with root-only permissions and verifies SSH host keys", () => {
     expect(launchScript).toContain("StrictHostKeyChecking=yes");
     expect(launchScript).not.toContain("StrictHostKeyChecking=no");
+    expect(launchScript).toContain('"EMAIL_PROVIDER=$EMAIL_PROVIDER"');
     expect(launchScript).toContain("sudo sh -c 'umask 077; cat > /opt/recipe-graph/.env.demo'");
     expect(launchScript).toContain("sudo chown ubuntu:ubuntu /opt/recipe-graph");
   });

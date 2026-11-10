@@ -70,7 +70,7 @@ Email provider selection is required at API startup. Local Compose selects SMTP 
 **Commands:**
 - `npm run check` -- passed: lint, type-check, and 171 tests; 2 graph-dependent tests skipped.
 - `npm run build:api` -- passed: API build succeeds with the SMTP adapter and provider selection.
-- `npx vitest run tests/accounts-mailer.test.ts tests/deployment/local-compose.test.ts` -- passed: 9 tests, including SMTP endpoint wiring and Mailpit readiness dependency.
+- `npx vitest run tests/accounts-mailer.test.ts tests/deployment/local-compose.test.ts tests/deployment/demo-compose.test.ts tests/deployment/demo-up.test.ts tests/deployment/account-migration.test.ts` -- passed: 27 tests, including provider selection, SMTP endpoint wiring, demo configuration, and Mailpit readiness dependency.
 - `docker compose --env-file .env.example config --quiet` with validation-only Neo4j and verification-secret values -- passed.
 - `docker compose -f docker-compose.demo.yml --env-file .env.demo.example config --quiet` with validation-only Resend, sender, Neo4j, and hostname values -- passed.
 - Mailpit SMTP smoke test -- passed: the adapter sent a message to Mailpit and its inbox API returned the expected recipient, subject, and body.
@@ -83,3 +83,11 @@ Email provider selection is required at API startup. Local Compose selects SMTP 
 
 - **low / patch — Mailpit startup readiness:** Compose originally waited only for the Mailpit container to start, not for its SMTP listener to become ready; the API now waits for the image's built-in health check, and the local Compose contract test pins that dependency.
 - **low / patch — SMTP endpoint test gap:** Provider selection tests verified the SMTP adapter type but not the Nodemailer host and port; added an assertion that the factory supplies the configured Mailpit host and port.
+- **medium / patch — demo provider configuration parsing:** The demo config reader rejected the new `EMAIL_PROVIDER` setting in `.env.demo.example`; its allowlist and value accessor now accept the setting, and the existing demo preflight test reaches its expected later validation step with `EMAIL_PROVIDER=resend`.
+- **medium / patch — demo provider validation:** Missing provider selection could pass the local preflight and fail later during Compose startup; preflight now requires `EMAIL_PROVIDER=resend` before cloud provisioning.
+- **medium / patch — generated demo environment:** The deployment wrote Resend credentials but omitted the provider selector required by demo Compose; it now includes `EMAIL_PROVIDER` in the protected generated file.
+- **low / patch — SMTP timeout bounds:** Nodemailer defaults could leave local registration or resend waiting on a stalled SMTP socket; SMTP connection, greeting, and socket operations now have 10-second bounds.
+- **false — SMTP credential transport:** The SMTP config no longer supports credentials and is strict about unsupported settings, so this Mailpit-only transport cannot send configured SMTP credentials without TLS.
+- **false — implicit TLS SMTP:** This change supports only local Mailpit's plaintext SMTP endpoint on port 1025; implicit-TLS SMTP on port 465 is outside the frozen local-development intent.
+- **medium / patch — Compose SMTP port assertion:** The local Compose test did not verify that API `SMTP_PORT` matched Mailpit's internal 1025 listener; the test now pins the API port.
+- **medium / patch — local provider override:** Local Compose initially interpolated `EMAIL_PROVIDER`, allowing a developer to select external Resend despite the local-only Mailpit intent; Compose now pins SMTP and its deployment test enforces it.
