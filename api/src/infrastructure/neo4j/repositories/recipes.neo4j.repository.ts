@@ -136,7 +136,7 @@ export class Neo4jRecipesRepository implements RecipesRepository {
                     aggregate:
                         individualRatings.length === 0
                             ? readAggregateRating(record.get('aggregateRating'))
-                            : null,
+                            : readAggregateRating(record.get('combinedRating')),
                 },
             };
         });

@@ -120,6 +120,7 @@ describe("Neo4j recipe detail repository", () => {
       ingredients: ["salt", "water"],
       cuisines: ["Italian"],
       individualRatings: [neo4j.int(5), neo4j.int(3)],
+      combinedRating: 4,
     };
     const record = { get: (field: string) => values[field] };
     const session = {
@@ -131,7 +132,7 @@ describe("Neo4j recipe detail repository", () => {
 
     await expect(repository.getRecipeDetail("recipe-1")).resolves.toEqual({
       ...availableDetail,
-      ratings: { individual: [5, 3], aggregate: null },
+      ratings: { individual: [5, 3], aggregate: 4 },
     });
     const [query, parameters] = session.run.mock.calls[0] ?? [];
     expect(query).toContain("(recipe)-[:HAS_RATING]->(rating:Rating)");

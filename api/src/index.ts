@@ -9,6 +9,7 @@ import { Neo4jRecipesRepository } from "./infrastructure/neo4j/repositories/reci
 import { Neo4jAccountsRepository } from "./infrastructure/neo4j/repositories/accounts.neo4j.repository.js";
 import { Argon2PasswordHasher } from "./infrastructure/accounts/argon2-password-hasher.js";
 import { createVerificationMailer, emailEnvironmentSchema } from "./infrastructure/accounts/email-config.js";
+import { createGoogleIdentityVerifier } from "./infrastructure/accounts/google-verifier.js";
 import { AccountsService } from "./application/services/accounts.service.js";
 
 const environmentSchema = z.object({
@@ -19,6 +20,8 @@ const environmentSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   VERIFICATION_CODE_SECRET: z.string().min(32),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  GOOGLE_CLIENT_ID: z.string().trim().min(1).optional(),
+  GOOGLE_CLIENT_IDS: z.string().trim().min(1).optional(),
 }).and(emailEnvironmentSchema);
 
 async function main() {
@@ -39,13 +42,21 @@ async function main() {
     driver,
     environment.NEO4J_DATABASE,
   );
+  const googleVerifier = createGoogleIdentityVerifier(environment);
   const accountsService = new AccountsService({
     repository: accountsRepository,
     passwordHasher: new Argon2PasswordHasher(),
     mailer: createVerificationMailer(environment),
     verificationSecret: environment.VERIFICATION_CODE_SECRET,
+    googleVerifier,
     onResendDeliveryFailure: (challengeId, error) => {
       console.error("Verification email delivery failed.", {
+        challengeId,
+        reason: error instanceof Error ? error.message : "Unknown delivery error",
+      });
+    },
+    onRecoveryDeliveryFailure: (challengeId, error) => {
+      console.error("Password recovery email delivery failed.", {
         challengeId,
         reason: error instanceof Error ? error.message : "Unknown delivery error",
       });

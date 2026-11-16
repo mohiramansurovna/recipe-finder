@@ -7,6 +7,32 @@ export class ResendVerificationMailer implements VerificationMailer {
     ) {}
 
     async sendVerificationEmail(email: string, code: string, idempotencyKey: string): Promise<void> {
+        await this.sendEmail(
+            email,
+            code,
+            idempotencyKey,
+            'Verify your Recipe Graph account',
+            `Your verification code is ${code}. It expires in 24 hours.`,
+        );
+    }
+
+    async sendRecoveryEmail(email: string, code: string, idempotencyKey: string): Promise<void> {
+        await this.sendEmail(
+            email,
+            code,
+            idempotencyKey,
+            'Reset your Recipe Graph password',
+            `Your password reset code is ${code}. It expires in 1 hour.`,
+        );
+    }
+
+    private async sendEmail(
+        email: string,
+        code: string,
+        idempotencyKey: string,
+        subject: string,
+        text: string,
+    ): Promise<void> {
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -18,8 +44,8 @@ export class ResendVerificationMailer implements VerificationMailer {
             body: JSON.stringify({
                 from: this.from,
                 to: [email],
-                subject: 'Verify your Recipe Graph account',
-                text: `Your verification code is ${code}. It expires in 24 hours.`,
+                subject,
+                text,
             }),
         });
         if (!response.ok) {

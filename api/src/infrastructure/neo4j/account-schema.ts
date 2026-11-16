@@ -14,6 +14,10 @@ const ACCOUNT_CONSTRAINTS = [
     { label: 'Account', property: 'emailNormalized', name: 'account_email_unique' },
     { label: 'Account', property: 'usernameNormalized', name: 'account_username_unique' },
     { label: 'VerificationChallenge', property: 'id', name: 'verification_challenge_id_unique' },
+    { label: 'RecoveryChallenge', property: 'id', name: 'recovery_challenge_id_unique' },
+    { label: 'AccountSession', property: 'id', name: 'account_session_id_unique' },
+    { label: 'GoogleIdentity', property: 'subject', name: 'google_identity_subject_unique' },
+    { label: 'Rating', property: 'id', name: 'rating_id_unique' },
     { label: 'AccountRateLimit', property: 'key', name: 'account_rate_limit_key_unique' },
 ] as const;
 

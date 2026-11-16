@@ -99,4 +99,18 @@ describe('SMTP verification mailer', () => {
             text: 'Your verification code is 01234567. It expires in 24 hours.',
         });
     });
+
+    it('sends password recovery messages with the recovery expiry', async () => {
+        const sendMail = vi.fn().mockResolvedValue(undefined);
+        const mailer = new SmtpVerificationMailer({ sendMail }, 'noreply@local.test');
+
+        await mailer.sendRecoveryEmail('cook@example.com', '01234567', 'challenge-id');
+
+        expect(sendMail).toHaveBeenCalledWith({
+            from: 'noreply@local.test',
+            to: 'cook@example.com',
+            subject: 'Reset your Recipe Graph password',
+            text: 'Your password reset code is 01234567. It expires in 1 hour.',
+        });
+    });
 });

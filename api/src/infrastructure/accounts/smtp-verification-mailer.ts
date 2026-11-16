@@ -24,4 +24,14 @@ export class SmtpVerificationMailer implements VerificationMailer {
             text: `Your verification code is ${code}. It expires in 24 hours.`,
         });
     }
+
+    async sendRecoveryEmail(email: string, code: string, idempotencyKey: string): Promise<void> {
+        void idempotencyKey;
+        await this.transport.sendMail({
+            from: this.from,
+            to: email,
+            subject: 'Reset your Recipe Graph password',
+            text: `Your password reset code is ${code}. It expires in 1 hour.`,
+        });
+    }
 }

@@ -94,7 +94,7 @@ describe('account schema migration and readiness', () => {
         await migrateAccountSchema(driver, 'neo4j');
         await migrateAccountSchema(driver, 'neo4j');
         await expect(assertAccountSchemaReady(driver, 'neo4j')).resolves.toBeUndefined();
-        expect(queries.filter((query) => query.startsWith('CREATE CONSTRAINT'))).toHaveLength(10);
+        expect(queries.filter((query) => query.startsWith('CREATE CONSTRAINT'))).toHaveLength(18);
         expect(driver.verifyConnectivity).toHaveBeenCalledOnce();
     });
 

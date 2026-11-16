@@ -66,11 +66,19 @@ CALL {
 CALL {
   WITH recipe
   OPTIONAL MATCH (recipe)-[:HAS_RATING]->(rating:Rating)
+  WHERE rating.value > 0
   RETURN collect(rating.value) AS individualRatings
+}
+CALL {
+  WITH recipe
+  OPTIONAL MATCH (recipe)-[:HAS_RATING]->(rating:Rating)
+  WHERE rating.value > 0
+  RETURN avg(rating.value) AS combinedRating
 }
 RETURN recipe.id AS id, recipe.name AS name, recipe.minutes AS minutes,
        recipe.instructions AS instructions,
        recipe.aggregateRating AS aggregateRating,
+       combinedRating AS combinedRating,
        ingredients AS ingredients, cuisines AS cuisines,
        individualRatings AS individualRatings
 `;
