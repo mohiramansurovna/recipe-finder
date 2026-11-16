@@ -21,3 +21,6 @@ known_hosts.demo
 data/raw/
 data/prepared/
 .terraform
+.gradle/
+android/**/build/
+android/local.properties
