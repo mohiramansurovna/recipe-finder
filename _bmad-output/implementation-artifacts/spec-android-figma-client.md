@@ -9,7 +9,7 @@ baseline_commit: '6c215721a2725affab991b7d7912be1da4246f93'
 context:
   - '{project-root}/docs/prd.md'
   - '{project-root}/README.md'
-  - '{project-root}/_bmad-output/implementation-artifacts/spec-1-1-register-and-verify-a-password-account.md'
+  - '{project-root}/_bmad-output/archive/account-backed-backend/spec-1-1-register-and-verify-a-password-account.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
@@ -44,8 +44,8 @@ context:
 - `api/src/interface/http/routes/recipes.routes.ts` and `api/src/interface/http/schemas/recipes.schemas.ts` -- `POST /api/recipes/search`, `GET /api/recipes/:id`, explicit API error envelope, search cursor and validation contract.
 - `api/src/core/recipes/recipes.types.ts` -- Search page and recipe-detail response shapes, including nullable time/instructions and anonymous ratings.
 - `docs/prd.md` -- Current Android requirements FR-22 through FR-33, target 393 x 852 dp and 360 dp minimum width; it supersedes the older account-backend-only scope for parallel client development.
-- `_bmad-output/specs/spec-account-backed-backend/SPEC.md` -- Account/session/rating/favorite/deletion requirements and constraints; route contracts remain unfinished.
-- `_bmad-output/implementation-artifacts/spec-1-1-register-and-verify-a-password-account.md` -- Shipped registration/verification behavior and API errors.
+- `_bmad-output/archive/account-backed-backend/SPEC.md` and `docs/api-contract.md` -- Account/session/rating/favorite/deletion requirements and client contract; the backend is now implemented on main.
+- `_bmad-output/archive/account-backed-backend/spec-1-1-register-and-verify-a-password-account.md` -- Shipped registration/verification behavior and API errors.
 - `README.md` -- API setup, local base URL, HTTPS demo warning, and synthetic-account requirement.
 - Supplied Figma file, `qP5DLZjjPHBKhMvWG57O06` -- Mobile 393 x 852 screens for welcome, registration, verification, sign-in, search, results, recipe details, favorites, account, and visual/error variants. Implement main phone flows and relevant states, not unrelated desktop/tablet boards.
 - No Android project, Gradle configuration, reusable UI library, or Android SDK/Java/Gradle toolchain exists in this worktree; create the client under `android/` and document its build/configuration.
