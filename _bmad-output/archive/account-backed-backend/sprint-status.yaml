@@ -29,23 +29,23 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-09-2026 15:27
-last_updated: 11-09-2026 18:50
+last_updated: 11-16-2026 16:10
 project: recipe-finder
 project_key: NOKEY
 tracking_system: file-system
 story_location:
-  /home/mira/projects/recipe-finder/_bmad-output/implementation-artifacts
+  /home/mira/projects/recipe-finder/_bmad-output/archive/account-backed-backend
 development_status:
-  epic-1: in-progress
-  1-1-register-and-verify-a-password-account: review
-  1-2-sign-in-and-start-a-device-session: backlog
-  1-3-recover-password-access-safely: backlog
-  1-4-manage-sessions-across-devices: backlog
-  1-5-create-or-access-an-account-with-google: backlog
+  epic-1: done
+  1-1-register-and-verify-a-password-account: done
+  1-2-sign-in-and-start-a-device-session: done
+  1-3-recover-password-access-safely: done
+  1-4-manage-sessions-across-devices: done
+  1-5-create-or-access-an-account-with-google: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-rate-recipes-and-see-anonymous-combined-ratings: backlog
-  2-2-save-remove-and-retrieve-favorite-recipes: backlog
-  2-3-delete-an-account-and-anonymize-ratings: backlog
+  epic-2: done
+  2-1-rate-recipes-and-see-anonymous-combined-ratings: done
+  2-2-save-remove-and-retrieve-favorite-recipes: done
+  2-3-delete-an-account-and-anonymize-ratings: done
   epic-2-retrospective: optional

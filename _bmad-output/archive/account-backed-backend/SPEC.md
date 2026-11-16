@@ -2,9 +2,9 @@
 id: SPEC-account-backed-backend
 companions:
   - ../../planning-artifacts/architecture/architecture-recipe-finder-2026-11-09/ARCHITECTURE-SPINE.md
-  - bmad-roadmap.md
   - source-ratings.md
   - ../../../docs/prd.md
+  - ../../../docs/backend-overview.md
 sources: []
 ---
 
@@ -14,7 +14,7 @@ sources: []
 
 ## Why
 
-Home cooks can already find and inspect recipes, but cannot keep favorites or record personal ratings. Account-backed capabilities make those journeys persistent and private, and must be completed before the first-party Android client begins.
+Home cooks can already find and inspect recipes, but cannot keep favorites or record personal ratings. Account-backed capabilities make those journeys persistent and private, and are implemented in the backend; the first-party Android client proceeds in parallel against these API contracts.
 
 ## Capabilities
 
@@ -50,7 +50,7 @@ Home cooks can already find and inspect recipes, but cannot keep favorites or re
 - Source ratings are individual whole-number values from 1 to 5; 0 means unrated and is excluded. Pool source and user values when computing aggregates.
 - Raw and prepared dataset files remain local; do not commit them or copy them into application images.
 - Keep existing `/api` routes stable, make compatible additions, and introduce a new API version only for breaking changes.
-- Use BMAD specs and planning artifacts for requirements, architecture, stories, and implementation planning. Complete backend account capabilities before Android work.
+- Use BMAD specs and planning artifacts for requirements, architecture, stories, and implementation planning.
 
 ## Non-goals
 
@@ -60,7 +60,7 @@ Home cooks can already find and inspect recipes, but cannot keep favorites or re
 
 ## Success signal
 
-A person can use password or Google access to manage backend sessions, ratings, and favorites. API tests for PRD requirements FR-13 through FR-21 pass for valid, invalid, and privacy-sensitive behavior, including verification and recovery, session termination, repeated-rating updates, and anonymous ratings. Android work starts only after these backend capabilities are complete.
+A person can use password or Google access to manage backend sessions, ratings, and favorites. API tests for PRD requirements FR-13 through FR-21 pass for valid, invalid, and privacy-sensitive behavior, including verification and recovery, session termination, repeated-rating updates, and anonymous ratings. Android development targets these API contracts in parallel (per the PRD and addendum).
 
 ## Assumptions
 

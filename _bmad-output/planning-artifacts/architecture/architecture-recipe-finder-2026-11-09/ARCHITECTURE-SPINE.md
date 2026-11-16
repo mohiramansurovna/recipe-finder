@@ -18,8 +18,8 @@ binds:
   - CAP-7
 sources: []
 companions:
-  - ../../../specs/spec-account-backed-backend/SPEC.md
-  - ../../../specs/spec-account-backed-backend/source-ratings.md
+  - ../../../archive/account-backed-backend/SPEC.md
+  - ../../../archive/account-backed-backend/source-ratings.md
   - ../../../../docs/prd.md
 ---
 

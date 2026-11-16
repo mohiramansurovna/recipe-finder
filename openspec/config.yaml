@@ -23,8 +23,11 @@ context: |
     state; do not include dataset identities or other personal data.
   - Keep demo security review, verified SSH, cost confirmation, and teardown
     safeguards effective.
-  - Keep OpenSpec as the canonical scoped change record. Preserve archived
-    changes; active specs describe current backend behavior.
+  - Use BMAD for new scoped requirements and change planning. For explicitly
+    requested continuation of a legacy OpenSpec change, use its existing
+    records and rules without creating a competing plan. Preserve archived
+    OpenSpec changes as historical references; do not treat OpenSpec as the
+    canonical change record for new work.
   - Do not implement mobile, accounts, ratings/favorites, or recommendations
     as part of backend cleanup.
 

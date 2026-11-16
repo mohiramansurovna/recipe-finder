@@ -2,7 +2,9 @@
 
 Private ingredient-first recipe discovery API backed by Neo4j. The API provides
 ingredient parsing, filtered recipe search with ranked cursor pagination, and
-recipe details. There is no web client in this repository.
+recipe details, plus account-backed sessions, ratings, and favorites. There is
+no web client in this repository. For how the layers, routes, and service
+functions connect, see [`docs/backend-overview.md`](docs/backend-overview.md).
 
 ## API source layout
 
@@ -86,6 +88,30 @@ another loopback port.
 - Register: `POST http://localhost:8080/api/accounts/register`
 - Verify: `POST http://localhost:8080/api/accounts/verify`
 - Resend verification: `POST http://localhost:8080/api/accounts/resend-verification`
+- Sign in: `POST http://localhost:8080/api/accounts/sign-in`
+- Current profile: `GET http://localhost:8080/api/accounts/me` (Bearer access token)
+- Sessions: `GET /api/accounts/sessions`, `POST /api/accounts/sessions/refresh`,
+  `POST /api/accounts/sign-out`, and `DELETE /api/accounts/sessions/:sessionId`
+- Recovery: `POST /api/accounts/recover` and `POST /api/accounts/reset-password`
+- Google sign-in: `POST /api/accounts/google` (requires Google client ID configuration)
+- Favorites: `GET` and `POST /api/accounts/favorites`, then
+  `DELETE /api/accounts/favorites/:recipeId`
+- Ratings: `GET /api/accounts/ratings/:recipeId`, `POST /api/accounts/ratings`,
+  and `DELETE /api/accounts/ratings/:recipeId`
+- Delete account: `DELETE /api/accounts/me` with `{ "confirm": true }`
+
+Profile reads, session listing/revocation, favorites, ratings, and account deletion
+operations require `Authorization: Bearer <accessToken>`. The profile response
+contains only the signed-in account's normalized email and username. Sign-in
+returns an opaque access token (valid for 15 minutes) and refresh token (rotated
+on use, with a 30-day lifetime); store these securely and never log or share
+them. The refresh endpoint uses the current refresh token in its request body.
+Password recovery returns the same accepted response for known and
+unknown addresses. Public recipe details include identity-free individual
+ratings and their combined mean when available.
+
+Use synthetic disposable accounts only against the publicly reachable demo.
+Never send real personal information or credentials there.
 
 Registration accepts `{ "email": "...", "username": "...", "password": "..." }`.
 Email is trimmed and case-folded; usernames are case-folded and must contain
@@ -106,6 +132,33 @@ emails are sent only after account and challenge state has committed. A failed
 initial delivery returns `503 EMAIL_DELIVERY_FAILED` while leaving the account
 eligible for the non-enumerating resend flow; resend delivery failures are
 reported internally without changing the public response.
+
+#### Account endpoint contracts
+
+Sign-in accepts `{ "email": "...", "password": "...", "deviceName": "..." }`
+and returns `{ "sessionId": "...", "accessToken": "...", "refreshToken": "..." }`.
+Invalid credentials return `401 INVALID_CREDENTIALS`. Google sign-in accepts
+`{ "idToken": "...", "username": "...", "deviceName": "..." }`; username is
+required only when creating a new account. Existing Google accounts may omit it.
+A new account whose Google email needs verification receives `202`; verified
+identities receive the same session response as password sign-in.
+
+The current profile returns `{ "email": "...", "username": "..." }`. The
+sessions endpoint returns `{ "sessions": [...] }`, with each entry containing
+`sessionId`, `deviceName`, `createdAt`, `lastUsedAt`, `expiresAt`, and `current`.
+Sign-out and session termination return a message; refresh accepts
+`{ "refreshToken": "..." }` and returns a new session response. Always replace
+the stored refresh token after rotation.
+
+Recovery accepts `{ "email": "..." }` and returns the same `202` response for
+known and unknown accounts. Password reset accepts
+`{ "email": "...", "code": "12345678", "password": "..." }`.
+Favorites use `{ "recipeId": "..." }` for add and return a `favorites` array
+for list. Ratings use `{ "recipeId": "...", "rating": 1 }`; the authenticated
+rating read returns `{ "recipeId": "...", "rating": null }` when the account
+has not rated that recipe. Account deletion accepts `{ "confirm": true }`.
+Profile, session listing/revocation, favorite, rating, and account-deletion
+endpoints require an authenticated session.
 
 Example search request:
 

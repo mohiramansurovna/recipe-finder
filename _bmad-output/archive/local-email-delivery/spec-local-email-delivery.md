@@ -7,7 +7,7 @@ route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: '7309ba9cc0a9ce5672b8b294f970cab314697e08'
 context:
-  - '{project-root}/_bmad-output/implementation-artifacts/spec-1-1-register-and-verify-a-password-account.md'
+  - '{project-root}/_bmad-output/archive/account-backed-backend/spec-1-1-register-and-verify-a-password-account.md'
 ---
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">

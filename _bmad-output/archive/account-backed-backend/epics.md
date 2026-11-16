@@ -7,10 +7,9 @@ stepsCompleted:
   - step-04-final-validation
 inputDocuments:
   - docs/prd.md
-  - _bmad-output/specs/spec-account-backed-backend/SPEC.md
+  - _bmad-output/archive/account-backed-backend/SPEC.md
   - _bmad-output/planning-artifacts/architecture/architecture-recipe-finder-2026-11-09/ARCHITECTURE-SPINE.md
-  - _bmad-output/specs/spec-account-backed-backend/source-ratings.md
-  - _bmad-output/implementation-artifacts/spec-password-accounts.md
+  - _bmad-output/archive/account-backed-backend/source-ratings.md
   - README.md
 ---
 
