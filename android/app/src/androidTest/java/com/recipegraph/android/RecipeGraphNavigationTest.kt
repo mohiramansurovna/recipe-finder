@@ -1,15 +1,16 @@
 package com.recipegraph.android
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.recipegraph.android.data.AccountProfile
 import com.recipegraph.android.data.ApiError
+import com.recipegraph.android.data.FavoriteRecipe
 import com.recipegraph.android.data.ApiResult
 import com.recipegraph.android.data.ParseResult
 import com.recipegraph.android.data.RecipeDataSource
@@ -41,8 +42,7 @@ class RecipeGraphNavigationTest {
         composeRule.onNodeWithText("If the account is eligible, a verification email will be sent.").assertExists()
         composeRule.onNodeWithTag("verification-code").performTextInput("12345678")
         composeRule.onNodeWithTag("verification-submit").performClick()
-        composeRule.onNodeWithText("Sign-in and session services are not available yet. No local session will be created.")
-            .assertExists()
+        composeRule.onNodeWithTag("signin-submit").assertExists()
     }
 
     @Test
@@ -66,16 +66,34 @@ class RecipeGraphNavigationTest {
     }
 
     @Test
-    fun signInUnavailableDoesNotExposeSearchOrFavorites() {
+    fun failedSignInStaysOnSignInAndNeverExposesProtectedScreens() {
+        launchApp(
+            FakeRecipeDataSource(
+                signInResult = ApiResult.Failure(ApiError("INVALID_CREDENTIALS", "Email or password is incorrect."))
+            )
+        )
+
+        composeRule.onNodeWithTag("welcome-signin").performClick()
+        composeRule.onNodeWithTag("signin-email").performTextInput("demo@example.test")
+        composeRule.onNodeWithTag("signin-password").performTextInput("long-enough-password")
+        composeRule.onNodeWithTag("signin-submit").performClick()
+
+        composeRule.onNodeWithText("Email or password is incorrect.").assertExists()
+        composeRule.onNodeWithText("Search recipes").assertDoesNotExist()
+    }
+
+    @Test
+    fun successfulSignInOpensSearch() {
         launchApp(FakeRecipeDataSource())
 
         composeRule.onNodeWithTag("welcome-signin").performClick()
-        composeRule.onNodeWithText("Continue").performClick()
+        composeRule.onNodeWithTag("signin-email").performTextInput("demo@example.test")
+        composeRule.onNodeWithTag("signin-password").performTextInput("long-enough-password")
+        composeRule.onNodeWithTag("signin-submit").performClick()
 
-        composeRule.onNodeWithText("Search recipes").assertDoesNotExist()
-        composeRule.onNodeWithText("Favorites").assertDoesNotExist()
-        composeRule.onNodeWithText("Sign-in and session services are not available yet. No local session will be created.")
-            .assertExists()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("Search recipes").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun launchApp(repository: RecipeDataSource) {
@@ -88,13 +106,24 @@ class RecipeGraphNavigationTest {
     }
 
     private class FakeRecipeDataSource(
-        private val registrationResult: ApiResult<Unit> = ApiResult.Success(Unit)
+        private val registrationResult: ApiResult<Unit> = ApiResult.Success(Unit),
+        private val signInResult: ApiResult<Unit> = ApiResult.Success(Unit)
     ) : RecipeDataSource {
+        override fun hasStoredSession() = false
+        override suspend fun signIn(email: String, password: String, deviceName: String) = signInResult
+        override suspend fun signOut(): ApiResult<Unit> = ApiResult.Success(Unit)
+        override suspend fun getProfile(): ApiResult<AccountProfile> =
+            ApiResult.Success(AccountProfile("demo@example.test", "recipe_user"))
+        override suspend fun deleteAccount(): ApiResult<Unit> = ApiResult.Success(Unit)
+        override suspend fun listFavorites(): ApiResult<List<FavoriteRecipe>> = ApiResult.Success(emptyList())
+        override suspend fun addFavorite(recipeId: String): ApiResult<Unit> = ApiResult.Success(Unit)
+        override suspend fun removeFavorite(recipeId: String): ApiResult<Unit> = ApiResult.Success(Unit)
+        override suspend fun getMyRating(recipeId: String): ApiResult<Int?> = ApiResult.Success(null)
+        override suspend fun setRating(recipeId: String, rating: Int): ApiResult<Unit> = ApiResult.Success(Unit)
+        override suspend fun removeRating(recipeId: String): ApiResult<Unit> = ApiResult.Success(Unit)
         override suspend fun register(email: String, username: String, password: String) = registrationResult
         override suspend fun verify(email: String, code: String) = ApiResult.Success(Unit)
         override suspend fun resendVerification(email: String) = ApiResult.Success(Unit)
-        override fun signInUnavailable() =
-            ApiResult.Failure(ApiError("UNAVAILABLE", "Sign-in and session routes are not yet available."))
         override suspend fun parseIngredients(text: String) =
             ApiResult.Success(ParseResult(emptyList(), emptyList(), emptyList(), emptyList()))
         override suspend fun searchRecipes(criteria: ParseResult, cursor: String?) =

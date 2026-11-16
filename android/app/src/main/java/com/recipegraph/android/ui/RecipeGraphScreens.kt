@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.recipegraph.android.data.AccountInputValidator
+import com.recipegraph.android.data.FavoriteRecipe
 import com.recipegraph.android.data.ParseResult
 import com.recipegraph.android.data.RecipeDetail
 import com.recipegraph.android.data.RecipeSummary
@@ -181,7 +183,7 @@ fun SignInScreen(
             label = { Text("Email") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag("signin-email")
         )
         OutlinedTextField(
             value = password,
@@ -190,30 +192,14 @@ fun SignInScreen(
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            "Sign-in and session services are not available yet. No local session will be created.",
-            color = MaterialTheme.colorScheme.error
+            modifier = Modifier.fillMaxWidth().testTag("signin-password")
         )
         errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = {
             onSignIn(email, password)
             password = ""
-        }, modifier = Modifier.fillMaxWidth()) { Text("Continue") }
+        }, modifier = Modifier.fillMaxWidth().testTag("signin-submit")) { Text("Sign in") }
         Button(onClick = onRegisterClick, modifier = Modifier.fillMaxWidth()) { Text("Create an account") }
-    }
-}
-
-@Composable
-fun ProtectedUnavailableScreen(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Sign-in required", style = MaterialTheme.typography.headlineMedium)
-        Text("Session services are not available. Protected recipe features remain locked.")
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }
 
@@ -348,8 +334,11 @@ fun RecipeDetailScreen(
     recipe: RecipeDetail?,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    isFavorite: Boolean,
+    myRating: Int?,
     onToggleFavorite: () -> Unit,
     onRateRecipe: (Int) -> Unit,
+    onClearRating: () -> Unit,
     errorMessage: String?
 ) {
     Column(
@@ -372,8 +361,21 @@ fun RecipeDetailScreen(
             val ratingValues = if (recipe.ratings.isEmpty()) "Unavailable" else recipe.ratings.joinToString()
             val average = recipe.ratingAggregate?.let { "%.1f".format(it) } ?: "unavailable"
             Text("Anonymous ratings: $ratingValues (average $average)")
-            Button(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth()) { Text("Add to favorites") }
-            Button(onClick = { onRateRecipe(5) }, modifier = Modifier.fillMaxWidth()) { Text("Rate this recipe") }
+            Button(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth().testTag("favorite-toggle")) {
+                Text(if (isFavorite) "Remove from favorites" else "Add to favorites")
+            }
+            Text(myRating?.let { "Your rating: $it of 5" } ?: "You have not rated this recipe.")
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (1..5).forEach { value ->
+                    Button(
+                        onClick = { onRateRecipe(value) },
+                        modifier = Modifier.testTag("rate-$value")
+                    ) { Text(if (myRating == value) "✓$value" else "$value") }
+                }
+            }
+            if (myRating != null) {
+                Button(onClick = onClearRating, modifier = Modifier.fillMaxWidth()) { Text("Remove my rating") }
+            }
         }
         errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (recipe == null && errorMessage != null) {
@@ -385,15 +387,30 @@ fun RecipeDetailScreen(
 
 @Composable
 fun FavoritesScreen(
+    favorites: List<FavoriteRecipe>,
+    isLoaded: Boolean,
+    onOpen: (FavoriteRecipe) -> Unit,
+    onRemove: (FavoriteRecipe) -> Unit,
     onBack: () -> Unit,
-    errorMessage: String
+    errorMessage: String?
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Favorites", style = MaterialTheme.typography.headlineMedium)
-        Text(errorMessage, color = MaterialTheme.colorScheme.error)
+        errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (isLoaded && favorites.isEmpty()) Text("You have no favorites yet.")
+        favorites.forEach { recipe ->
+            Card(modifier = Modifier.fillMaxWidth().clickable { onOpen(recipe) }) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(recipe.name, style = MaterialTheme.typography.titleMedium)
+                    Text("Cook time: ${recipe.minutes?.let { "$it min" } ?: "Unavailable"}")
+                    if (recipe.ingredientNames.isNotEmpty()) Text(recipe.ingredientNames.joinToString())
+                    Button(onClick = { onRemove(recipe) }) { Text("Remove") }
+                }
+            }
+        }
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }
@@ -410,6 +427,24 @@ fun AccountScreen(
     errorMessage: String?
 ) {
     var selected by remember { mutableStateOf(themeMode) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete account?") },
+            text = { Text("This permanently deletes your account, favorites and ratings. It cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmDelete = false
+                        onDeleteAccount()
+                    },
+                    modifier = Modifier.testTag("delete-confirm")
+                ) { Text("Delete permanently") }
+            },
+            dismissButton = { Button(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        )
+    }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -430,7 +465,7 @@ fun AccountScreen(
         }
         errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Sign out") }
-        Button(onClick = onDeleteAccount, modifier = Modifier.fillMaxWidth()) { Text("Delete account") }
+        Button(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth().testTag("delete-account")) { Text("Delete account") }
         Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
     }
 }

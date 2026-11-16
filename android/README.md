@@ -21,10 +21,10 @@ Use an `https://` URL for the demo build. Cleartext traffic is allowed only for 
 ## Features included
 
 - Registration, verification, and resend flows
-- Sign-in gate that blocks signed-in flows when the session API is unavailable
+- Sign-in with Keystore-encrypted token storage, session restore, one-time refresh on expired sessions, sign-out, and account deletion with confirmation
 - Ingredient parsing and correction before search
 - Ranked recipe search with pagination and cursor reuse
-- Recipe detail, anonymous ratings, and favorites actions that report unavailable backend routes clearly
+- Recipe detail, anonymous ratings, personal ratings (1-5), and favorites against the account API
 - Device-local theme preference storage
 - Clear loading, validation, empty, unavailable, and not-found states
 - Accessibility labels and responsive 360 dp-safe layout behavior
@@ -44,4 +44,4 @@ With an emulator or device attached, run the Compose navigation tests:
 ./gradlew connectedDebugAndroidTest
 ```
 
-The project intentionally does not fabricate session or favorite endpoints. Unsupported account actions show an explicit unavailable state rather than a fake success.
+Signed-in screens are only reachable with a real session from `POST /api/accounts/sign-in`; the app never simulates a session or success. Tokens are stored encrypted with an Android Keystore key and are cleared when refresh is rejected, on sign-out, and on account deletion. Use synthetic disposable accounts only.

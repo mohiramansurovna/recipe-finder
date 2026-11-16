@@ -56,14 +56,15 @@ context:
 - [x] `android/` -- Create a native Kotlin/Jetpack Compose app, theme, navigation, and configurable development/demo API endpoints -- establish the project required by FR-22 and FR-33.
 - [ ] `android/` -- Implement Figma-matched welcome, registration, verification, sign-in, search, results, recipe details, favorites, and account screens with responsive layouts -- cover the signed-in discovery journey and 360 dp width. Figma comparison and device-width checks remain blocked because the design handoff could not be retrieved.
 - [x] `android/` -- Add typed API/data/repository boundaries for implemented backend routes and explicit unavailable states for unresolved contracts -- avoid fake success while backend work proceeds.
+- [x] `android/` -- Wire sign-in, Keystore token storage, refresh-on-expiry, favorites, personal ratings, sign-out, and account deletion against `docs/api-contract.md` -- backend routes now exist on main.
 - [x] `android/` -- Implement input correction, ranking/pagination, loading/error/empty states, device-local theme preference, and accessibility behavior -- preserve the PRD's user and privacy guarantees without simulating unsupported sessions.
-- [ ] `android/` -- Add focused unit/UI tests and setup instructions -- make screen state, error handling, API configuration, and build reproducible. Tests and instructions are present, but Android verification could not run because Java/Android SDK are unavailable in this environment.
+- [x] `android/` -- Add focused unit/UI tests and setup instructions -- make screen state, error handling, API configuration, and build reproducible. Unit tests pass locally; instrumentation tests compile but have not been run on the emulator.
 
 **Acceptance Criteria:**
 - Given a 393 x 852 dp phone, when the app is opened, then its in-scope screens match the corresponding Figma mobile layouts and navigation.
 - Given a 360 dp-wide phone, when each screen is displayed, then content and primary actions remain visible and usable without horizontal clipping.
 - Given registration, verification, parsing, search, and detail requests, when the API responds, then the app uses the documented contracts and presents loading, success, empty, validation, unavailable, and not-found states accurately.
-- Given no sign-in/session API route, when sign-in is attempted, then the app reports unavailability and does not create a local identity or expose signed-in routes.
+- Given a failed sign-in or no stored session, when protected screens are requested, then the app stays on sign-in, creates no local identity, and exposes no signed-in routes.
 - Given parsed ingredients containing unrecognized terms, when criteria are reviewed or edited, then unmatched terms remain visible until the person removes or corrects them.
 - Given paginated results, when the person requests more, then the same criteria and returned cursor are used; changing criteria restarts the search.
 - Given a public demo build or account action whose API contract is unavailable, when configured or invoked, then the app warns to use synthetic credentials and never displays fabricated backend success.
@@ -71,16 +72,17 @@ context:
 
 ## Implementation Notes
 
-The Android project and API-backed flows are implemented. The sign-in/session-dependent screens remain gated because their backend routes are absent. API base URL configuration is via Gradle property `apiBaseUrl`; local cleartext is limited to emulator/localhost hosts. Dataset attribution wording remains pending confirmation against the source terms.
+The Android project and all API-backed flows are implemented, including sign-in, Keystore-encrypted session storage, single-flight refresh on `SESSION_EXPIRED`, favorites, personal ratings, sign-out, and account deletion (DELETE with `{"confirm":true}`). The UI is still unstyled scaffold pending the Figma handoff. API base URL configuration is via Gradle property `apiBaseUrl`; local cleartext is limited to emulator/localhost hosts. Dataset attribution wording remains pending confirmation against the source terms.
 
 ## Verification
 
 **Commands:**
-- `cd android && ./gradlew test --no-daemon` -- blocked: Java is not installed in this environment; Android unit tests were not run here.
-- `cd android && ./gradlew connectedDebugAndroidTest --no-daemon` -- not run: requires Java, Android SDK, and an attached emulator/device.
+- `cd android && ./gradlew testDebugUnitTest assembleDebug compileDebugAndroidTestKotlin --no-daemon` -- passed.
+- `cd android && ./gradlew connectedDebugAndroidTest --no-daemon` -- not run yet.
 - `npm run check` -- passed: lint, type-check, and Vitest (171 passed, 2 skipped).
 
 **Manual checks:**
+- Emulator (WSL, `recipe_pixel`) against the local API with synthetic accounts: registration/verification, sign-in, session restore after restart, search, detail, favorite add/remove, rating set/remove, sign-out, cancelled and confirmed account deletion; each action confirmed with curl against the backend.
 - Figma comparison at 393 x 852 dp and 360 dp, touch/keyboard checks, and emulator inspection remain unverified because the Figma MCP lookup timed out and no Android SDK/device is available.
 
 ## Review Triage Log

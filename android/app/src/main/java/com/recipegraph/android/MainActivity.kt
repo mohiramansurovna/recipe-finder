@@ -24,7 +24,12 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.recipegraph.android.data.ApiError
 import com.recipegraph.android.data.ApiResult
+import com.recipegraph.android.data.FavoriteRecipe
+import com.recipegraph.android.data.KeystoreTokenStore
+import com.recipegraph.android.data.UrlConnectionTransport
+import com.recipegraph.android.data.requiresSignIn
 import com.recipegraph.android.data.ParseResult
 import com.recipegraph.android.data.RecipeDataSource
 import com.recipegraph.android.data.RecipeDetail
@@ -37,7 +42,6 @@ import com.recipegraph.android.ui.RecipeDetailScreen
 import com.recipegraph.android.ui.RecipeResultsScreen
 import com.recipegraph.android.ui.SearchScreen
 import com.recipegraph.android.ui.SignInScreen
-import com.recipegraph.android.ui.ProtectedUnavailableScreen
 import com.recipegraph.android.ui.ThemeMode
 import com.recipegraph.android.ui.ThemePreferenceStore
 import com.recipegraph.android.ui.VerifyScreen
@@ -49,7 +53,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val context = LocalContext.current
-            val repository = remember { RecipeRepository(BuildConfig.API_BASE_URL) }
+            val repository = remember { RecipeRepository(UrlConnectionTransport(BuildConfig.API_BASE_URL), KeystoreTokenStore(context)) }
             val themeStore = remember { ThemePreferenceStore(context) }
             RecipeGraphTheme(themeMode = themeStore.themeMode) {
                 RecipeGraphApp(repository = repository, themeStore = themeStore)
@@ -69,13 +73,58 @@ fun RecipeGraphApp(
     var username by rememberSaveable { mutableStateOf("") }
     var apiError by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    val sessionRoutesAvailable = false
+    var signedIn by remember { mutableStateOf(repository.hasStoredSession()) }
+    var sessionChecked by remember { mutableStateOf(!repository.hasStoredSession()) }
+    var favorites by remember { mutableStateOf<List<FavoriteRecipe>>(emptyList()) }
+    var favoritesLoaded by remember { mutableStateOf(false) }
+    var myRating by remember { mutableStateOf<Int?>(null) }
     var searchIngredients by rememberSaveable { mutableStateOf("") }
     var parsedText by remember { mutableStateOf<String?>(null) }
     var parsedIngredients by remember { mutableStateOf(ParseResult(emptyList(), emptyList(), emptyList(), emptyList())) }
     var searchResults by remember { mutableStateOf<List<RecipeSummary>>(emptyList()) }
     var searchCursor by remember { mutableStateOf<String?>(null) }
     var recipeDetail by remember { mutableStateOf<RecipeDetail?>(null) }
+
+    fun returnToSignIn(message: String?) {
+        signedIn = false
+        favorites = emptyList()
+        favoritesLoaded = false
+        myRating = null
+        recipeDetail = null
+        email = ""
+        username = ""
+        apiError = message
+        navController.navigate("signIn") {
+            popUpTo(navController.graph.id) { inclusive = true }
+        }
+    }
+
+    /** Shows a failure, or returns to sign-in when the session can no longer be used. */
+    fun handleFailure(error: ApiError) {
+        if (error.requiresSignIn()) returnToSignIn(error.message) else apiError = error.message
+    }
+
+    // Restore a stored session on start; the profile call proves the tokens still work.
+    LaunchedEffect(Unit) {
+        if (repository.hasStoredSession()) {
+            isLoading = true
+            when (val result = repository.getProfile()) {
+                is ApiResult.Success -> {
+                    email = result.value.email
+                    username = result.value.username
+                    signedIn = true
+                    navController.navigate("search") { popUpTo("welcome") { inclusive = true } }
+                }
+                is ApiResult.Failure -> if (result.error.requiresSignIn()) {
+                    signedIn = false
+                } else {
+                    apiError = result.error.message
+                }
+            }
+            isLoading = false
+        }
+        sessionChecked = true
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         if (isLoading) {
@@ -152,9 +201,24 @@ fun RecipeGraphApp(
 
             composable("signIn") {
                 SignInScreen(
-                    onSignIn = { _, _ ->
-                        val result = repository.signInUnavailable()
-                        apiError = (result as ApiResult.Failure).error.message
+                    onSignIn = { emailInput, passwordInput ->
+                        apiError = null
+                        scope.launch {
+                            isLoading = true
+                            when (val result = repository.signIn(emailInput, passwordInput, android.os.Build.MODEL)) {
+                                is ApiResult.Success -> when (val profile = repository.getProfile()) {
+                                    is ApiResult.Success -> {
+                                        email = profile.value.email
+                                        username = profile.value.username
+                                        signedIn = true
+                                        navController.navigate("search") { popUpTo("welcome") { inclusive = true } }
+                                    }
+                                    is ApiResult.Failure -> handleFailure(profile.error)
+                                }
+                                is ApiResult.Failure -> apiError = result.error.message
+                            }
+                            isLoading = false
+                        }
                     },
                     onRegisterClick = { navController.navigate("register") },
                     errorMessage = apiError
@@ -162,8 +226,8 @@ fun RecipeGraphApp(
             }
 
             composable("search") {
-                if (!sessionRoutesAvailable) {
-                    ProtectedUnavailableScreen { navController.popBackStack() }
+                if (!signedIn) {
+                    LaunchedEffect(Unit) { returnToSignIn(null) }
                 } else SearchScreen(
                     ingredientsText = searchIngredients,
                     parsedIngredients = parsedIngredients,
@@ -236,8 +300,8 @@ fun RecipeGraphApp(
             }
 
             composable("results") {
-                if (!sessionRoutesAvailable) {
-                    ProtectedUnavailableScreen { navController.popBackStack() }
+                if (!signedIn) {
+                    LaunchedEffect(Unit) { returnToSignIn(null) }
                 } else RecipeResultsScreen(
                     recipes = searchResults,
                     onRecipeClick = { recipe ->
@@ -269,16 +333,30 @@ fun RecipeGraphApp(
 
             composable("detail/{recipeId}") { entry ->
                 val recipeId = entry.arguments?.getString("recipeId").orEmpty()
-                if (!sessionRoutesAvailable) {
-                    ProtectedUnavailableScreen { navController.popBackStack() }
+                if (!signedIn) {
+                    LaunchedEffect(Unit) { returnToSignIn(null) }
                 } else {
                     LaunchedEffect(recipeId) {
                         recipeDetail = null
+                        myRating = null
                         apiError = null
                         isLoading = true
                         when (val result = repository.getRecipe(recipeId)) {
                             is ApiResult.Success -> recipeDetail = result.value
                             is ApiResult.Failure -> apiError = result.error.message
+                        }
+                        if (recipeDetail != null) {
+                            when (val result = repository.getMyRating(recipeId)) {
+                                is ApiResult.Success -> myRating = result.value
+                                is ApiResult.Failure -> handleFailure(result.error)
+                            }
+                            when (val result = repository.listFavorites()) {
+                                is ApiResult.Success -> {
+                                    favorites = result.value
+                                    favoritesLoaded = true
+                                }
+                                is ApiResult.Failure -> handleFailure(result.error)
+                            }
                         }
                         isLoading = false
                     }
@@ -298,11 +376,52 @@ fun RecipeGraphApp(
                                 isLoading = false
                             }
                         },
+                        isFavorite = favorites.any { it.id == recipeId },
+                        myRating = myRating,
                         onToggleFavorite = {
-                            apiError = "Favorites are unavailable until the protected backend routes are added."
+                            apiError = null
+                            val wasFavorite = favorites.any { it.id == recipeId }
+                            scope.launch {
+                                isLoading = true
+                                val result = if (wasFavorite) {
+                                    repository.removeFavorite(recipeId)
+                                } else {
+                                    repository.addFavorite(recipeId)
+                                }
+                                when (result) {
+                                    is ApiResult.Success -> when (val list = repository.listFavorites()) {
+                                        is ApiResult.Success -> {
+                                            favorites = list.value
+                                            favoritesLoaded = true
+                                        }
+                                        is ApiResult.Failure -> handleFailure(list.error)
+                                    }
+                                    is ApiResult.Failure -> handleFailure(result.error)
+                                }
+                                isLoading = false
+                            }
                         },
-                        onRateRecipe = {
-                            apiError = "Ratings are unavailable until the account-backed route is shipped."
+                        onRateRecipe = { value ->
+                            apiError = null
+                            scope.launch {
+                                isLoading = true
+                                when (val result = repository.setRating(recipeId, value)) {
+                                    is ApiResult.Success -> myRating = value
+                                    is ApiResult.Failure -> handleFailure(result.error)
+                                }
+                                isLoading = false
+                            }
+                        },
+                        onClearRating = {
+                            apiError = null
+                            scope.launch {
+                                isLoading = true
+                                when (val result = repository.removeRating(recipeId)) {
+                                    is ApiResult.Success -> myRating = null
+                                    is ApiResult.Failure -> handleFailure(result.error)
+                                }
+                                isLoading = false
+                            }
                         },
                         errorMessage = apiError
                     )
@@ -310,27 +429,71 @@ fun RecipeGraphApp(
             }
 
             composable("favorites") {
-                if (!sessionRoutesAvailable) {
-                    ProtectedUnavailableScreen { navController.popBackStack() }
-                } else FavoritesScreen(
-                    onBack = { navController.popBackStack() },
-                    errorMessage = "Favorites are unavailable until the protected session-backed routes exist."
-                )
+                if (!signedIn) {
+                    LaunchedEffect(Unit) { returnToSignIn(null) }
+                } else {
+                    LaunchedEffect(Unit) {
+                        apiError = null
+                        isLoading = true
+                        when (val result = repository.listFavorites()) {
+                            is ApiResult.Success -> {
+                                favorites = result.value
+                                favoritesLoaded = true
+                            }
+                            is ApiResult.Failure -> handleFailure(result.error)
+                        }
+                        isLoading = false
+                    }
+                    FavoritesScreen(
+                        favorites = favorites,
+                        isLoaded = favoritesLoaded,
+                        onOpen = { recipe ->
+                            recipeDetail = null
+                            navController.navigate("detail/${android.net.Uri.encode(recipe.id)}")
+                        },
+                        onRemove = { recipe ->
+                            apiError = null
+                            scope.launch {
+                                isLoading = true
+                                when (val result = repository.removeFavorite(recipe.id)) {
+                                    is ApiResult.Success -> favorites = favorites.filterNot { it.id == recipe.id }
+                                    is ApiResult.Failure -> handleFailure(result.error)
+                                }
+                                isLoading = false
+                            }
+                        },
+                        onBack = { navController.popBackStack() },
+                        errorMessage = apiError
+                    )
+                }
             }
 
             composable("account") {
-                if (!sessionRoutesAvailable) {
-                    ProtectedUnavailableScreen { navController.popBackStack() }
+                if (!signedIn) {
+                    LaunchedEffect(Unit) { returnToSignIn(null) }
                 } else AccountScreen(
                     email = email,
                     username = username,
                     themeMode = themeStore.themeMode,
                     onThemeChanged = { themeStore.setTheme(it) },
                     onSignOut = {
-                        apiError = "Sign-out is unavailable until a session endpoint exists."
+                        scope.launch {
+                            isLoading = true
+                            repository.signOut() // local tokens are cleared even if the server is unreachable
+                            isLoading = false
+                            returnToSignIn(null)
+                        }
                     },
                     onDeleteAccount = {
-                        apiError = "Account deletion is unavailable until the backend route is shipped."
+                        apiError = null
+                        scope.launch {
+                            isLoading = true
+                            when (val result = repository.deleteAccount()) {
+                                is ApiResult.Success -> returnToSignIn(null)
+                                is ApiResult.Failure -> handleFailure(result.error)
+                            }
+                            isLoading = false
+                        }
                     },
                     onBack = { navController.popBackStack() },
                     errorMessage = apiError

@@ -11,6 +11,7 @@ val apiBaseUrl = providers.gradleProperty("apiBaseUrl")
     .replace("\"", "\\\"")
 
 android {
+    testOptions { unitTests.isReturnDefaultValues = true }
     namespace = "com.recipegraph.android"
     compileSdk = 34
 
@@ -80,6 +81,7 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

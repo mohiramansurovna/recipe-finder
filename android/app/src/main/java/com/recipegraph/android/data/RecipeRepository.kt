@@ -2,13 +2,10 @@ package com.recipegraph.android.data
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
 
 sealed class ApiResult<out T> {
     data class Success<T>(val value: T) : ApiResult<T>()
@@ -82,81 +79,200 @@ data class RecipeDetail(
     val ratingAggregate: Double?
 )
 
+data class AccountProfile(val email: String, val username: String)
+
+data class FavoriteRecipe(
+    val id: String,
+    val name: String,
+    val minutes: Int?,
+    val ingredientNames: List<String>
+)
+
 interface RecipeDataSource {
     suspend fun register(email: String, username: String, password: String): ApiResult<Unit>
     suspend fun verify(email: String, code: String): ApiResult<Unit>
     suspend fun resendVerification(email: String): ApiResult<Unit>
-    fun signInUnavailable(): ApiResult<Unit>
     suspend fun parseIngredients(text: String): ApiResult<ParseResult>
     suspend fun searchRecipes(criteria: ParseResult, cursor: String?): ApiResult<SearchResult>
     suspend fun getRecipe(recipeId: String): ApiResult<RecipeDetail>
+
+    /** True when a device session is stored; it is verified by the next authenticated call. */
+    fun hasStoredSession(): Boolean
+    suspend fun signIn(email: String, password: String, deviceName: String): ApiResult<Unit>
+
+    /** Ends this device's session on the server and always clears the local session. */
+    suspend fun signOut(): ApiResult<Unit>
+    suspend fun getProfile(): ApiResult<AccountProfile>
+    suspend fun deleteAccount(): ApiResult<Unit>
+    suspend fun listFavorites(): ApiResult<List<FavoriteRecipe>>
+    suspend fun addFavorite(recipeId: String): ApiResult<Unit>
+    suspend fun removeFavorite(recipeId: String): ApiResult<Unit>
+    suspend fun getMyRating(recipeId: String): ApiResult<Int?>
+    suspend fun setRating(recipeId: String, rating: Int): ApiResult<Unit>
+    suspend fun removeRating(recipeId: String): ApiResult<Unit>
 }
 
+const val SESSION_EXPIRED = "SESSION_EXPIRED"
+const val UNAUTHENTICATED = "UNAUTHENTICATED"
+
+fun ApiError.requiresSignIn(): Boolean = code == SESSION_EXPIRED || code == UNAUTHENTICATED
+
 class RecipeRepository(
-    private val apiBaseUrl: String
+    private val transport: ApiTransport,
+    private val tokenStore: TokenStore
 ) : RecipeDataSource {
+    private val refreshLock = Mutex()
+
     override suspend fun register(email: String, username: String, password: String): ApiResult<Unit> =
-        request(
-            "/api/accounts/register",
+        call(
+            "POST", "/api/accounts/register",
             mapOf("email" to email.trim(), "username" to username.trim(), "password" to password)
         ) { Unit }
 
     override suspend fun verify(email: String, code: String): ApiResult<Unit> =
-        request("/api/accounts/verify", mapOf("email" to email.trim(), "code" to code)) { Unit }
+        call("POST", "/api/accounts/verify", mapOf("email" to email.trim(), "code" to code)) { Unit }
 
     override suspend fun resendVerification(email: String): ApiResult<Unit> =
-        request("/api/accounts/resend-verification", mapOf("email" to email.trim())) { Unit }
-
-    override fun signInUnavailable(): ApiResult<Unit> =
-        ApiResult.Failure(ApiError("UNAVAILABLE", "Sign-in and session routes are not yet available."))
+        call("POST", "/api/accounts/resend-verification", mapOf("email" to email.trim())) { Unit }
 
     override suspend fun parseIngredients(text: String): ApiResult<ParseResult> =
-        request("/api/ingredients/parse", mapOf("text" to text), JSONObject::toParseResult)
+        call("POST", "/api/ingredients/parse", mapOf("text" to text), mapper = JSONObject::toParseResult)
 
-    override suspend fun searchRecipes(criteria: ParseResult, cursor: String?): ApiResult<SearchResult> {
-        return request("/api/recipes/search", searchRequestPayload(criteria, cursor), JSONObject::toSearchResult)
-    }
+    override suspend fun searchRecipes(criteria: ParseResult, cursor: String?): ApiResult<SearchResult> =
+        call("POST", "/api/recipes/search", searchRequestPayload(criteria, cursor), mapper = JSONObject::toSearchResult)
 
     override suspend fun getRecipe(recipeId: String): ApiResult<RecipeDetail> =
-        request("/api/recipes/${recipeId.encodePathSegment()}", null) { it.toRecipeDetail() }
+        call("GET", "/api/recipes/${recipeId.encodePathSegment()}", null) { it.toRecipeDetail() }
 
-    private suspend fun <T> request(
+    override fun hasStoredSession(): Boolean = tokenStore.load() != null
+
+    override suspend fun signIn(email: String, password: String, deviceName: String): ApiResult<Unit> =
+        when (
+            val result = call(
+                "POST", "/api/accounts/sign-in",
+                mapOf("email" to email.trim(), "password" to password, "deviceName" to deviceName.take(120)),
+                mapper = JSONObject::toSessionTokens
+            )
+        ) {
+            is ApiResult.Success -> {
+                tokenStore.save(result.value)
+                ApiResult.Success(Unit)
+            }
+            is ApiResult.Failure -> result
+        }
+
+    override suspend fun signOut(): ApiResult<Unit> {
+        val result = authed("POST", "/api/accounts/sign-out", null) { Unit }
+        tokenStore.clear()
+        return result
+    }
+
+    override suspend fun getProfile(): ApiResult<AccountProfile> =
+        authed("GET", "/api/accounts/me", null) {
+            AccountProfile(email = it.getString("email"), username = it.getString("username"))
+        }
+
+    override suspend fun deleteAccount(): ApiResult<Unit> {
+        val result = authed("DELETE", "/api/accounts/me", mapOf("confirm" to true)) { Unit }
+        if (result is ApiResult.Success) tokenStore.clear()
+        return result
+    }
+
+    override suspend fun listFavorites(): ApiResult<List<FavoriteRecipe>> =
+        authed("GET", "/api/accounts/favorites", null) { it.toFavorites() }
+
+    override suspend fun addFavorite(recipeId: String): ApiResult<Unit> =
+        authed("POST", "/api/accounts/favorites", mapOf("recipeId" to recipeId)) { Unit }
+
+    override suspend fun removeFavorite(recipeId: String): ApiResult<Unit> =
+        authed("DELETE", "/api/accounts/favorites/${recipeId.encodePathSegment()}", null) { Unit }
+
+    override suspend fun getMyRating(recipeId: String): ApiResult<Int?> =
+        authed("GET", "/api/accounts/ratings/${recipeId.encodePathSegment()}", null) { it.optionalInt("rating") }
+
+    override suspend fun setRating(recipeId: String, rating: Int): ApiResult<Unit> =
+        authed("POST", "/api/accounts/ratings", mapOf("recipeId" to recipeId, "rating" to rating)) { Unit }
+
+    override suspend fun removeRating(recipeId: String): ApiResult<Unit> =
+        authed("DELETE", "/api/accounts/ratings/${recipeId.encodePathSegment()}", null) { Unit }
+
+    /**
+     * Sends an authenticated request. On `SESSION_EXPIRED` it refreshes the session once and
+     * retries; if the refresh is rejected the local session is cleared and the caller must
+     * return the person to sign-in.
+     */
+    private suspend fun <T> authed(
+        method: String,
         path: String,
         body: Map<String, Any?>?,
         mapper: (JSONObject) -> T
-    ): ApiResult<T> = withContext(Dispatchers.IO) {
-        var connection: HttpURLConnection? = null
-        try {
-            val url = URL(apiBaseUrl.trimEnd('/') + path)
-            connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = if (body == null) "GET" else "POST"
-            connection.connectTimeout = 12_000
-            connection.readTimeout = 12_000
-            connection.setRequestProperty("Accept", "application/json")
-            if (body != null) {
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { it.write(JSONObject(body).toString()) }
-            }
+    ): ApiResult<T> {
+        val tokens = tokenStore.load()
+            ?: return ApiResult.Failure(ApiError(UNAUTHENTICATED, "Sign in to continue."))
+        val first = call(method, path, body, tokens.accessToken, mapper)
+        if (first !is ApiResult.Failure || first.error.code != SESSION_EXPIRED) return first
 
-            val responseCode = connection.responseCode
-            val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (responseCode in 200..299) {
-                ApiResult.Success(mapper(JSONObject(text)))
-            } else {
-                ApiResult.Failure(text.toApiError(responseCode))
-            }
-        } catch (exception: CancellationException) {
-            throw exception
-        } catch (exception: Exception) {
-            Log.w("RecipeRepository", "API request failed: $path", exception)
-            ApiResult.Failure(
-                ApiError("SERVICE_UNAVAILABLE", "The backend is unavailable. Check the API base URL and try again.")
-            )
-        } finally {
-            connection?.disconnect()
+        when (val refreshed = refreshSession(tokens)) {
+            is ApiResult.Failure -> return refreshed
+            is ApiResult.Success -> Unit
         }
+        val renewed = tokenStore.load()
+            ?: return ApiResult.Failure(ApiError(SESSION_EXPIRED, SESSION_EXPIRED_MESSAGE))
+        return call(method, path, body, renewed.accessToken, mapper)
+    }
+
+    private suspend fun refreshSession(stale: SessionTokens): ApiResult<Unit> = refreshLock.withLock {
+        val current = tokenStore.load()
+            ?: return@withLock ApiResult.Failure(ApiError(SESSION_EXPIRED, SESSION_EXPIRED_MESSAGE))
+        // Another request already rotated the pair while this one waited for the lock.
+        if (current.refreshToken != stale.refreshToken) return@withLock ApiResult.Success(Unit)
+
+        when (
+            val result = call(
+                "POST", "/api/accounts/sessions/refresh",
+                mapOf("refreshToken" to current.refreshToken),
+                mapper = JSONObject::toSessionTokens
+            )
+        ) {
+            is ApiResult.Success -> {
+                // Refresh tokens are single-use, so the new pair must replace the old one.
+                tokenStore.save(result.value)
+                ApiResult.Success(Unit)
+            }
+            is ApiResult.Failure -> if (result.error.code == SESSION_EXPIRED || result.error.code == "INVALID_REQUEST") {
+                tokenStore.clear()
+                ApiResult.Failure(ApiError(SESSION_EXPIRED, SESSION_EXPIRED_MESSAGE))
+            } else {
+                // Offline or rate limited: keep the session so a later attempt can still refresh.
+                result
+            }
+        }
+    }
+
+    private suspend fun <T> call(
+        method: String,
+        path: String,
+        body: Map<String, Any?>?,
+        bearerToken: String? = null,
+        mapper: (JSONObject) -> T
+    ): ApiResult<T> = try {
+        val response = transport.execute(method, path, body, bearerToken)
+        if (response.status in 200..299) {
+            ApiResult.Success(mapper(JSONObject(response.body)))
+        } else {
+            ApiResult.Failure(response.body.toApiError(response.status))
+        }
+    } catch (exception: CancellationException) {
+        throw exception
+    } catch (exception: Exception) {
+        Log.w("RecipeRepository", "API request failed: $method $path (${exception.javaClass.simpleName}: ${exception.message})")
+        ApiResult.Failure(
+            ApiError("SERVICE_UNAVAILABLE", "The backend is unavailable. Check the API base URL and try again.")
+        )
+    }
+
+    private companion object {
+        const val SESSION_EXPIRED_MESSAGE = "Your session expired. Sign in again."
     }
 }
 
@@ -218,6 +334,25 @@ internal fun searchRequestPayload(criteria: ParseResult, cursor: String?): Map<S
     "maxMinutes" to null,
     "cursor" to cursor
 )
+
+internal fun JSONObject.toSessionTokens() = SessionTokens(
+    sessionId = getString("sessionId"),
+    accessToken = getString("accessToken"),
+    refreshToken = getString("refreshToken")
+)
+
+internal fun JSONObject.toFavorites(): List<FavoriteRecipe> {
+    val values = optJSONArray("favorites") ?: JSONArray()
+    return List(values.length()) { index ->
+        val item = values.getJSONObject(index)
+        FavoriteRecipe(
+            id = item.getString("id"),
+            name = item.getString("name"),
+            minutes = item.optionalInt("minutes"),
+            ingredientNames = item.stringList("ingredientNames")
+        )
+    }
+}
 
 internal fun JSONObject.optionalInt(key: String): Int? =
     if (isNull(key) || !has(key)) null else optInt(key)
