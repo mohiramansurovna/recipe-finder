@@ -4,7 +4,9 @@ Private ingredient-first recipe discovery API backed by Neo4j. The API provides
 ingredient parsing, filtered recipe search with ranked cursor pagination, and
 recipe details, plus account-backed sessions, ratings, and favorites. There is
 no web client in this repository. For how the layers, routes, and service
-functions connect, see [`docs/backend-overview.md`](docs/backend-overview.md).
+functions connect, see [`docs/backend-overview.md`](docs/backend-overview.md);
+client request/response shapes and error codes are in
+[`docs/api-contract.md`](docs/api-contract.md).
 
 ## API source layout
 

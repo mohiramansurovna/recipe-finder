@@ -14,7 +14,7 @@ This PRD is the product-level source for Recipe Graph's goals, user outcomes, sc
 
 Recipe Graph is a hobby project whose Android app demonstrates ingredient-based recipe discovery to internal staff. A staff member creates and verifies a demo account, signs in, enters available ingredients, reviews the parsed ingredients, and searches the recipe graph. The app presents matching recipes, detailed cooking information, anonymous ratings, and favorites, with account and theme controls in one place.
 
-The backend API and locally prepared recipe graph provide the existing ingredient parsing, search, and recipe details; email registration and verification are also implemented. The native Android client is being planned in parallel with remaining backend account capabilities, coordinated through the API contract rather than waiting for every backend feature to finish before UI work begins. The Android client will use Kotlin, follow the approved Figma design, and remain a small demo app. The public demo is not access-controlled, so only synthetic disposable accounts may be used there.
+The backend API and locally prepared recipe graph provide the existing ingredient parsing, search, and recipe details; the account-backed capabilities are also implemented: registration, verification, password sign-in with device sessions, recovery, Google sign-in, anonymous ratings, favorites, and account deletion (contract in `docs/api-contract.md`). The native Android client is developed in parallel against that contract. The Android client will use Kotlin, follow the approved Figma design, and remain a small demo app. The public demo is not access-controlled, so only synthetic disposable accounts may be used there.
 
 ## 2. Target user and journey
 
@@ -116,7 +116,7 @@ The web interface and its dedicated build, tests, and deployment wiring have bee
 
 ### 4.5 Accounts, sessions, ratings, and favorites
 
-Email registration, email verification, and verification-code resend are implemented by the backend. Password sign-in and sessions, ratings, favorites, and account deletion are the remaining backend capabilities required by this demo. Password recovery and Google sign-in remain outside the Android demo scope. The Android client and required backend capabilities may be developed in parallel against a coordinated API contract; the integrated demo flow depends on those backend operations being available.
+Registration, email verification, verification-code resend, password sign-in with device sessions, password recovery, Google sign-in, ratings, favorites, and account deletion are implemented by the backend; request and response contracts are in `docs/api-contract.md`. Password recovery and Google sign-in remain outside the Android demo scope. The Android client integrates against that contract.
 
 #### FR-13: Manage an account
 
@@ -248,13 +248,13 @@ The Android demo includes account registration and email verification, password 
 3. Consolidated product guidance into this PRD and BMAD artifacts, with essential setup and operational instructions in the README. The README and executable checks retain demo security and teardown safeguards.
 4. Updated active product requirements and project guidance to reflect backend-only behavior; historical artifacts remain unchanged.
 
-### In progress: account-backed backend
+### Completed: account-backed backend
 
-Email registration, verification, and resend are implemented. Remaining backend work for this demo is password sign-in and device sessions, one rating per account per recipe combined with source ratings, favorites, account deletion, and related authenticated API contracts. The source-rating audit confirmed individual whole-number ratings from 1 to 5; 0 means unrated. Combine source and user ratings by pooling individual values and computing a count-weighted arithmetic mean. The Android client may be developed in parallel against the agreed request, response, and error contracts; end-to-end integration waits for the required API operations.
+Implemented: registration, verification, resend, password sign-in with rotating device sessions, recovery, Google sign-in, one rating per account per recipe combined with source ratings, favorites, and account deletion. The source-rating audit confirmed individual whole-number ratings from 1 to 5; 0 means unrated. Combine source and user ratings by pooling individual values and computing a count-weighted arithmetic mean. The Android client integrates against the request, response, and error contracts in `docs/api-contract.md`.
 
 ### In parallel: Android client
 
-Create the Kotlin Android app in `android/` while backend work continues. Use the approved Figma handoff as the visual reference and coordinate API contracts with the backend work. Validate the integrated registration, verification, sign-in, ingredient search, recipe detail, rating, favorites, theme, logout, and account-deletion flow once all required endpoints are available.
+Create the Kotlin Android app in `android/` against the implemented backend contract. Use the approved Figma handoff as the visual reference. Validate the integrated registration, verification, sign-in, ingredient search, recipe detail, rating, favorites, theme, logout, and account-deletion flow end to end with synthetic accounts.
 
 ### Future discovery
 

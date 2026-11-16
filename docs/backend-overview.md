@@ -2,8 +2,8 @@
 
 Status as of 2026-11-16: the account-backed backend (Epics 1 and 2, FR-13 to FR-21) is implemented and verified. This is the single
 engineering report for it. Product scope stays in `docs/prd.md` and `docs/addendum.md`; setup and operations stay in `README.md`.
-Requirements and stories are in `_bmad-output/archive/account-backed-backend/epics.md` and the contract is
-`_bmad-output/archive/account-backed-backend/SPEC.md` (archived: implemented).
+Client request/response shapes and error codes are in `docs/api-contract.md`. Requirements and stories are in
+`_bmad-output/archive/account-backed-backend/epics.md`, and the original spec is `_bmad-output/archive/account-backed-backend/SPEC.md` (archived: implemented).
 
 ## 1. Layers and request flow
 
@@ -60,11 +60,11 @@ allows 10 requests per 15 minutes on the routes marked below.
 | `POST /accounts/reset-password` | no, limited | `resetPassword` | Code + new password; revokes all sessions |
 | `POST /accounts/sessions/refresh` | refresh token in body | `refreshSession` | Rotate tokens |
 | `GET /accounts/sessions` | yes | `listSessions` | Active sessions with device name and last-used time |
-| `POST /accounts/sign-out`, `DELETE /accounts/sessions/current` | yes | `revokeSession` (current) | End this device |
-| `DELETE /accounts/sessions/:sessionId` | yes | `revokeSession` | End another device |
+| `POST /accounts/sign-out`, `DELETE /accounts/sessions/current` | yes | `signOut` (current session) | End this device |
+| `DELETE /accounts/sessions/:sessionId` | yes | `signOut` (with target session id) | End another device |
 | `GET /accounts/me` | yes | `getProfile` | Email and username only |
 | `GET`, `POST /accounts/favorites`, `DELETE /accounts/favorites/:recipeId` | yes | `listFavorites`, `addFavorite`, `removeFavorite` | My Recipes |
-| `GET /accounts/ratings/:recipeId`, `POST /accounts/ratings`, `DELETE /accounts/ratings/:recipeId` | yes | `getRating`, `setRating`, `removeRating` | The caller's own 1-5 rating |
+| `GET /accounts/ratings/:recipeId`, `POST /accounts/ratings`, `DELETE /accounts/ratings/:recipeId` | yes | `getMyRating`, `setRating`, `removeRating` | The caller's own 1-5 rating |
 | `DELETE /accounts/me` | yes, body `{confirm:true}` | `deleteAccount` | Terminal account deletion |
 
 `reportPublicError()` maps core errors to HTTP: `SessionExpiredError` 401, `AccountAlreadyExistsError` 409,
@@ -86,11 +86,12 @@ bound into the hash), `createVerificationCode` (8 digits via `randomInt`), `crea
 | `authenticateAccessToken(token)` | Repository `validateAccessToken` -> claim `{accountId, sessionId, accessTokenHash}` or `null` |
 | `refreshSession(refreshToken)` | Rotation and replay detection in the repository |
 | `getProfile`, `listSessions` | Read with claim re-verification inside the repository transaction |
+| `signOut(accountId, currentSessionId, accessTokenHash, targetSessionId?)` | Ends the current session, or another one of the same account, via repository `revokeSession` |
 | `requestRecovery(email, sourceIp)` | Repository issues challenge; mail is sent asynchronously (`deliverRecoveryEmail`) so timing does not reveal account existence; failures are logged via `onRecoveryDeliveryFailure` |
 | `resetPassword(input)` | Policy check, Argon2 hash, repository `resetPassword` (replace hash, consume code, revoke sessions in one transaction) |
 | `googleSignIn(input)` | Verifier checks the ID token; look up by Google subject; existing -> session; new -> username required, conflict checks, `createGoogleAccount` (verification email only for non-authoritative addresses), then session. A unique-constraint race re-reads the winner. |
 | `addFavorite`, `removeFavorite`, `listFavorites` | Repository calls bound to the caller's session claim |
-| `setRating`, `getRating`, `removeRating` | `setRating` requires an integer 1-5; repository upserts one rating per account and recipe |
+| `setRating`, `getMyRating`, `removeRating` | `setRating` requires an integer 1-5; repository upserts one rating per account and recipe; `getMyRating` returns the caller's value or null |
 | `deleteAccount` | Repository deletes account, sessions, favorites, challenges and Google identity, and detaches ratings |
 
 ### 3.3 Neo4j adapter (`Neo4jAccountsRepository`, implements `AccountsRepository`)
@@ -148,4 +149,5 @@ Design points verified by tests:
 
 1. Confirm dataset attribution terms for public API serving and the wording and placement before any external distribution.
 2. Record a reproducible provenance (snapshot id and script) for the source-rating audit counts in the SPEC companion.
-3. Android client: needs the approved Figma file and a minimum Android version before project setup.
+3. Android client: the backend contract is complete (`docs/api-contract.md`); see `docs/addendum.md` for the integration handoff and the
+   remaining Android decisions (Figma file, minimum Android version, attribution text).
