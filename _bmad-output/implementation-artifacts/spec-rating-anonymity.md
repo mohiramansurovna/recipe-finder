@@ -2,7 +2,7 @@
 title: 'Store Ratings Anonymously'
 type: 'refactor'
 created: '2026-11-17'
-status: 'draft'
+status: 'in-progress'
 route: 'dispatch'
 review_loop_iteration: 0
 baseline_commit: 'cb373c7a2b11a1c68515e4ce3ca57eca6b9f4607'
