@@ -7,18 +7,27 @@ export const GET_RECIPE_QUERY = `MATCH (cuisine:Cuisine)
  * Time and rating filters, ordering and paging happen in the service.
  */
 export const CANDIDATES_QUERY = `
+CALL () {
+  UNWIND $excluded AS excludedName
+  MATCH (blockedIngredient:Ingredient {name: excludedName})
+  RETURN blockedIngredient.name AS name
+  UNION
+  MATCH (category:IngredientCategory)<-[:IN_CATEGORY]-(blockedIngredient:Ingredient)
+  WHERE category.name IN $excludedCategories
+  RETURN blockedIngredient.name AS name
+}
+WITH collect(name) AS blocked
 MATCH (ingredient:Ingredient)
 WHERE ingredient.name IN $included
 MATCH (recipe:Recipe)-[:USES]->(ingredient)
-WITH recipe, count(DISTINCT ingredient) AS matched
-WHERE NOT EXISTS {
-    MATCH (recipe)-[:USES]->(excluded:Ingredient)
-    WHERE excluded.name IN $excluded
-  }
-  AND NOT EXISTS {
-    MATCH (recipe)-[:USES]->(:Ingredient)-[:IN_CATEGORY]->(category:IngredientCategory)
-    WHERE category.name IN $excludedCategories
-  }
+WITH recipe, count(DISTINCT ingredient) AS matched, blocked
+WHERE (
+    size(blocked) = 0
+    OR NOT EXISTS {
+      MATCH (recipe)-[:USES]->(excluded:Ingredient)
+      WHERE excluded.name IN blocked
+    }
+  )
   AND (
     size($cuisines) = 0
     OR EXISTS {

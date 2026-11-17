@@ -71,13 +71,13 @@ context:
 | rare x1 | 18 | 3 |
 | common x1 ("onion") | 489 | 39,065 |
 | common x3 / very common x5 / mixed rare+common | 1,241 / 1,618 / 1,062 | up to 153,889 |
-| exclusions (1 ingredient + 1 category) | 2,935 | - |
+| exclusions (1 ingredient + 1 category) | 895 (2,935 before the blocked-name rewrite) | - |
 | filters | 443 | - |
 | 5 pages in a row | 5,683 (about one query when cached) | - |
 
 - No duplicate `USES` edges exist, so `missing = degree - matched` is exact.
 - Largest measured cache entry (5 very common ingredients, 153,767 rows): 3.5 MB JSON, 1.0 MB gzipped. An entry cannot exceed the 231,636 recipes (about 1.6 MB), so no per-entry row cap is added; Redis `maxmemory` with `allkeys-lru` bounds the total.
-- The ~1 s target holds for typical first searches (up to three ingredients). Five very common ingredients take about 1.6 s and the exclusion scenario 2.9 s; both are cold-cache costs and later pages are served from Redis. Exclusion cost is the open follow-up.
+- The ~1 s target holds for typical first searches (up to three ingredients). Five very common ingredients take about 1.6-2.0 s, a cold-cache cost; later pages are served from Redis. Exclusions now resolve the blocked ingredient names once (excluded ingredients plus every ingredient in an excluded category, via indexes) and check each candidate against that short list, instead of walking each candidate's ingredients to their categories: the exclusion scenario went from about 3.2 s to 0.9 s with identical results (compared row for row on the dev graph across seven exclusion/cuisine combinations), and searches without exclusions skip the check.
 
 - `Ingredient.name` and `Recipe.id` are already uniquely indexed. The cost is the old query starting from every recipe, not finding ingredients.
 - Recipes average 9 ingredients; "onion" alone is in 39,065 recipes and a three-ingredient search touches ~53,000. That bounds the candidate list and the memory per cache entry.
