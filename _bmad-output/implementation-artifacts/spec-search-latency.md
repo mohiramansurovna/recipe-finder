@@ -34,7 +34,7 @@ context:
 | Later page | Cursor from a previous page, same criteria | Same next page as today; served from cache when warm, correct when cold | Cursor with different criteria still returns the existing client error |
 | No overlap recipes | Recipe sharing no included or excluded ingredient | Still ranked by its total ingredient count, so it can appear before larger partial matches exactly as today | Not dropped |
 | Only excluded or filter terms | No included ingredients | Same ranking as today (all recipes unmatched) | Same as today |
-| Cache expiry or restart | Entry older than TTL, evicted, or process restarted | Recomputed with identical results | Cache failure falls back to the uncached query |
+| Cache expiry or restart | No request for the entry within 1 minute, evicted, or process restarted | Recomputed with identical results | Cache failure falls back to the uncached query |
 | Older graph | Graph lacks the new property or index | API starts and still answers correctly via the existing query path | Readiness/log reports the graph needs migration |
 
 </frozen-after-approval>
@@ -55,7 +55,7 @@ context:
 
 1. **Candidates plus remainder.** For a search, compute scores only for recipes reachable from `$included` and `$excluded` ingredient nodes (matched, excluded matches, and total ingredients from relationship degree). Recipes with no overlap have matched 0, excluded 0, missing = total ingredients, so they are read in order from a new range index on `Recipe.ingredientCount` (then `id`) and anti-joined against the candidates, stopping once the page is full. Merge both ordered streams with the existing comparator. The existing rank-order check in the repository stays.
 2. **Graph change.** Store `ingredientCount` on `Recipe` and create `recipe_ingredient_count` on `(ingredientCount, id)` in the import and in a migration script alongside `scripts/migrate-account-schema.ts`. Record completion with the existing import-completion approach so an older graph is detected. When missing, fall back to the current query.
-3. **Cache.** A bounded in-process TTL cache (proposed 5 minutes, max ~20 entries, max candidate rows per entry) keyed by the existing criteria fingerprint plus the graph import identifier. It stores the compact scored candidate list and the filter-only `totalCount`; pages are cut from it with the cursor position. Per-account state is never cached. This is a performance cache only, so a miss or error recomputes.
+3. **Cache.** A bounded in-process cache with a **sliding 1-minute expiry**: every hit (a new page of the same search) resets the entry's timer, and an entry is removed once 1 minute passes with no request for it. Expiry is checked lazily on access plus a periodic sweep on an unref'd timer so idle entries free memory without keeping the process alive. Max ~20 entries and max candidate rows per entry, evicting least recently used first keyed by the existing criteria fingerprint plus the graph import identifier. It stores the compact scored candidate list and the filter-only `totalCount`; pages are cut from it with the cursor position. Per-account state is never cached. This is a performance cache only, so a miss or error recomputes. Sliding expiry cannot serve stale data because ranking depends only on the static graph, and the key includes the graph import identity; the entry and size caps bound memory for a user who keeps scrolling.
 4. **Why not only a cache?** A cache alone leaves the first search at ~4–5 s and costs memory for ~231k scored rows per distinct search. It is layered on top of the query change, not instead of it.
 5. **Why not only the query?** Each page would still repeat ~1 s of aggregation; the cache removes that for scrolling.
 
@@ -76,19 +76,19 @@ context:
 - [ ] `api/`, `scripts/` -- Add the `ingredientCount` property and `recipe_ingredient_count` index to the import and an idempotent migration; record completion; detect an older graph and fall back.
 - [ ] `api/` -- Implement the candidate-plus-remainder query and merge behind the existing repository port with unchanged contracts.
 - [ ] `api/` -- Add the bounded TTL cache behind a core port, keyed by criteria fingerprint and graph identity, with safe fallback.
-- [ ] Tests -- Equivalence tests proving old and new queries return identical pages, `totalCount` and cursors across the benchmark sets, including no-overlap recipes, exclusions, category and cuisine filters, `maxMinutes`, deep pagination and cursor mismatch; cache hit, expiry, eviction and fallback tests.
-- [ ] `README.md` -- Document migration, cache TTL and how to run the benchmark.
+- [ ] Tests -- Equivalence tests proving old and new queries return identical pages, `totalCount` and cursors across the benchmark sets, including no-overlap recipes, exclusions, category and cuisine filters, `maxMinutes`, deep pagination and cursor mismatch; cache hit, sliding-expiry (hit resets timer, idle entry removed after 1 minute, using fake timers), eviction and fallback tests.
+- [ ] `README.md` -- Document migration, cache expiry and how to run the benchmark.
 
 **Acceptance Criteria:**
 - Given any request in the benchmark set, when the new path runs, then recipes, order, `totalCount` and `nextCursor` equal the existing query's results page by page.
 - Given a typical first search on the full dataset, when measured with the benchmark, then it is meaningfully faster than the recorded baseline and the result is reported against the ~1 s PRD target (the target is confirmed or revised from the measurement, not assumed).
-- Given a warm cache, when the next page is requested, then it is served without re-aggregating candidates; after the TTL, eviction or restart it is recomputed with identical results.
+- Given a warm cache, when the next page is requested, then it is served without re-aggregating candidates; after 1 idle minute, eviction or restart it is recomputed with identical results.
 - Given a graph without the new property or index, when search runs, then results are still correct and the need for migration is reported.
 - Given a re-import, when search runs, then no stale cached results are served.
 
 ## Open Questions (need a decision before approval)
 
-1. **TTL and size:** is 5 minutes and about 20 entries right for a demo-sized instance, and is the demo host's memory budget known?
+1. **Size:** TTL is decided (sliding 1 minute); are about 20 entries and a per-entry row cap right for the demo host, and is its memory budget known?
 2. **Graph change:** is adding `Recipe.ingredientCount` plus an index acceptable (needs a migration for existing local and demo graphs), or must the graph stay untouched, which means the first page stays near ~1 s but remainder ordering is slower?
 3. **First-page target:** is "about 1 s" still the goal, or is a slower first search with a loading state acceptable on the client (the Android side will add loading text either way)?
 
