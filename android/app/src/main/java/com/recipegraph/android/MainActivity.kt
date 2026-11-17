@@ -87,6 +87,7 @@ fun RecipeGraphApp(
     var parsedIngredients by remember { mutableStateOf(ParseResult(emptyList(), emptyList(), emptyList(), emptyList())) }
     var searchResults by remember { mutableStateOf<List<RecipeSummary>>(emptyList()) }
     var searchCursor by remember { mutableStateOf<String?>(null) }
+    var loadingMore by remember { mutableStateOf(false) }
     var recipeDetail by remember { mutableStateOf<RecipeDetail?>(null) }
 
     fun returnToSignIn(message: String?) {
@@ -333,10 +334,10 @@ fun RecipeGraphApp(
                     },
                     onLoadMore = {
                         val cursor = searchCursor
-                        if (cursor != null) {
+                        if (cursor != null && !loadingMore) {
                             scope.launch {
                                 apiError = null
-                                isLoading = true
+                                loadingMore = true
                                 when (val result = repository.searchRecipes(parsedIngredients, cursor)) {
                                     is ApiResult.Success -> {
                                         searchResults = searchResults + result.value.recipes
@@ -344,11 +345,12 @@ fun RecipeGraphApp(
                                     }
                                     is ApiResult.Failure -> apiError = result.error.message
                                 }
-                                isLoading = false
+                                loadingMore = false
                             }
                         }
                     },
                     onBack = { navController.popBackStack() },
+                    isLoadingMore = loadingMore,
                     hasMore = searchCursor != null,
                     errorMessage = apiError
                 )

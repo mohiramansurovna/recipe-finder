@@ -23,6 +23,9 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +49,7 @@ import com.recipegraph.android.data.FavoriteRecipe
 import com.recipegraph.android.data.ParseResult
 import com.recipegraph.android.data.RecipeDetail
 import com.recipegraph.android.data.RecipeSummary
+import kotlinx.coroutines.flow.first
 
 private const val DEMO_FOOTER = "INTERNAL DEMO · SAMPLE DATA ONLY"
 
@@ -369,9 +373,19 @@ fun RecipeResultsScreen(
     onBack: () -> Unit,
     onNavigate: (RfTab) -> Unit,
     hasMore: Boolean,
+    isLoadingMore: Boolean,
     errorMessage: String?
 ) {
-    RfScreen("Recipes for you", onBack = onBack, activeTab = RfTab.Search, onNavigate = onNavigate) {
+    val scroll = rememberScrollState()
+    // Fetch the next page once the user scrolls near the end. Keyed on the list size so each
+    // new page re-arms it; a failed page does not retry until the user taps "Try again".
+    LaunchedEffect(hasMore, isLoadingMore, recipes.size, errorMessage) {
+        if (hasMore && !isLoadingMore && errorMessage == null && recipes.isNotEmpty()) {
+            snapshotFlow { scroll.maxValue - scroll.value <= 600 }.first { it }
+            onLoadMore()
+        }
+    }
+    RfScreen("Recipes for you", onBack = onBack, activeTab = RfTab.Search, onNavigate = onNavigate, scrollState = scroll) {
         RfHeadline("A little pantry magic.")
         if (criteriaSummary.isNotBlank()) RfBody(criteriaSummary)
         if (unrecognized.isNotEmpty()) {
@@ -393,7 +407,8 @@ fun RecipeResultsScreen(
                 )
             }
         }
-        if (hasMore) RfButton("Load more", onLoadMore, style = RfButtonStyle.Tonal)
+        if (isLoadingMore) RfLoadingIndicator()
+        else if (hasMore && errorMessage != null) RfButton("Try again", onLoadMore, style = RfButtonStyle.Tonal)
         RfButton("Edit ingredients", onBack, style = RfButtonStyle.Text)
     }
 }

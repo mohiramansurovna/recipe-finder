@@ -1,5 +1,6 @@
 package com.recipegraph.android.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,6 +69,7 @@ fun RfScreen(
     onBack: (() -> Unit)? = null,
     activeTab: RfTab? = null,
     onNavigate: (RfTab) -> Unit = {},
+    scrollState: ScrollState = rememberScrollState(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -75,7 +78,7 @@ fun RfScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content
@@ -191,6 +194,17 @@ fun RfCaption(text: String, color: Color = Rf.colors.muted, center: Boolean = fa
     textAlign = if (center) TextAlign.Center else TextAlign.Start,
     modifier = Modifier.fillMaxWidth()
 )
+
+@Composable
+fun RfLoadingIndicator() {
+    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(32.dp).semantics { contentDescription = "Loading more recipes" },
+            color = Rf.colors.primary,
+            trackColor = Rf.colors.primaryContainer
+        )
+    }
+}
 
 enum class RfButtonStyle { Filled, Tonal, Text, Error }
 
