@@ -34,14 +34,21 @@ Sign-out clears only this device's session. Account deletion is a separate, conf
 | `GET /api/ingredients` | none | `200 {"ingredients":[string]}` | `503 GRAPH_UNAVAILABLE` |
 | `POST /api/ingredients/parse` | `{"text":string}` (at most 2000 chars) | `200 {"included":[string],"excluded":[string],"excludedCategories":[string],"unrecognized":[string]}` | `400 INVALID_REQUEST`, `503 GRAPH_UNAVAILABLE` |
 | `GET /api/filters` | none | `200 {"categories":[string],"cuisines":[string]}` | `503 SEARCH_UNAVAILABLE`, `503 GRAPH_UNAVAILABLE` |
-| `POST /api/recipes/search` | see below | `200 {"recipes":[Result],"totalCount":int,"nextCursor":string or null}` | `400 INVALID_REQUEST`, `400 INVALID_CURSOR`, `503 SEARCH_UNAVAILABLE`, `503 GRAPH_UNAVAILABLE` |
+| `POST /api/recipes/search` | see below | `200 {"recipes":[Result],"totalCount":int,"nextCursor":string or null}` | `400 INVALID_REQUEST`, `400 INVALID_CURSOR`, `400 INGREDIENTS_REQUIRED`, `503 SEARCH_UNAVAILABLE`, `503 GRAPH_UNAVAILABLE` |
 | `GET /api/recipes/:id` | none | `200 RecipeDetail` | `400 INVALID_REQUEST`, `404 RECIPE_NOT_FOUND`, `503 SEARCH_UNAVAILABLE`, `503 GRAPH_UNAVAILABLE` |
 
 Parse keeps anything it cannot match in `unrecognized`; show those terms to the person rather than dropping them.
 
 **Search request** (all fields strict): `included` and `excluded` (string arrays, up to 100 unique items each, required),
 `excludedCategories` (subset of `dairy`, `nuts`, `meat`, `fish/seafood`, default `[]`), `cuisines` (names from `/filters`, default `[]`; an
-unknown cuisine returns `400 INVALID_REQUEST`), `maxMinutes` (`15`, `30`, `60` or `null`), `cursor` (`null` for the first page).
+unknown cuisine returns `400 INVALID_REQUEST`), `maxMinutes` (`15`, `30`, `60` or `null`), `minRating` (`3`, `4` or `null`, default `null`), `cursor` (`null` for the first page).
+`included` must contain at least one ingredient, otherwise `400 INGREDIENTS_REQUIRED` ("Add at least one ingredient to search.").
+Only recipes using at least one included ingredient are returned, ordered by most matched included ingredients, then fewest
+missing ingredients, then recipe id. Excluded ingredients and excluded categories hide recipes. `maxMinutes` hides slower recipes
+and recipes without a time. `minRating` hides recipes whose effective rating (mean of user and dataset ratings, else the dataset
+aggregate) is below the value, and unrated recipes; it does not change the order. `totalCount` is the number of recipes after
+all filters. `minRating` returns `503 SEARCH_UNAVAILABLE` until the rating migration has run. Cursors are opaque and bound to
+every criterion; a cursor from an older version returns `400 INVALID_CURSOR`.
 To page, send the same criteria with the returned `nextCursor`; changing any criteria means starting over with `cursor: null`.
 
 **Result:** `{"id","name","minutes":int or null,"matchedIngredients":[string],"missingIngredients":[string],"excludedIngredients":[string]}`.

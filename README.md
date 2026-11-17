@@ -63,6 +63,12 @@ available only after import and the account-schema migration succeed. The migrat
 checks the graph-level recipe import marker and recipe constraints; the separate
 Compose import marker is not used as proof of graph readiness. Local Compose uses
 Mailpit for verification email: open `http://localhost:8025` to inspect messages.
+Local Compose also starts Redis (`redis`), used only as the search candidate cache:
+it is capped by `REDIS_MAXMEMORY` with `allkeys-lru` eviction, entries expire after
+`SEARCH_CACHE_IDLE_SECONDS` (default 300) without use and are rebuilt after
+`SEARCH_CACHE_MAX_AGE_SECONDS` (default 86400). Sessions, refresh tokens and rate
+limits stay in Neo4j. Without `REDIS_URL`, or if Redis is down, search queries
+Neo4j directly. The demo AWS stack does not include Redis.
 Mailpit's SMTP port and web inbox bind only to host loopback; the API connects to
 its internal `mailpit:1025` service. Local signup does not need Resend credentials
 or a verified sender domain. Set a random `VERIFICATION_CODE_SECRET` of at least
@@ -179,7 +185,14 @@ graph and import marker.
 For host-side API development, set `NEO4J_URI=bolt://localhost:7687` and
 `SMTP_HOST=localhost` in `.env`, start
 `docker compose up neo4j importer account-migration mailpit`, then run
-`npm run dev:api` in another terminal.
+`npm run dev:api` in another terminal. Add `redis` to that command and set
+`REDIS_URL=redis://localhost:6379` to use the search cache.
+
+The account-schema migration (`npm run migrate:accounts`, run automatically by
+Compose) also strips owner fields from ratings and backfills `ratingAverage` and
+`ratingCount` on recipes; run it once on graphs imported earlier. Measure search
+latency against a loaded graph with `npm run benchmark:search`
+(`BENCHMARK_RUNS` sets repetitions).
 
 ## Checks
 
