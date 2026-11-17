@@ -191,12 +191,14 @@ class ApiModelTest {
             excludedCategories = listOf("dairy"),
             unrecognized = listOf("tofurkey")
         )
-        val firstPage = searchRequestPayload(criteria, null)
-        val nextPage = searchRequestPayload(criteria, "cursor-2")
+        val firstPage = searchRequestPayload(criteria, 4, null)
+        val nextPage = searchRequestPayload(criteria, 4, "cursor-2")
 
         assertEquals(listOf("chicken"), firstPage["included"])
         assertEquals(listOf("milk"), nextPage["excluded"])
         assertEquals(listOf("dairy"), nextPage["excludedCategories"])
+        assertEquals(4, firstPage["minRating"])
+        assertEquals(null, searchRequestPayload(criteria, null, null)["minRating"])
         assertEquals("cursor-2", nextPage["cursor"])
         assertFalse(nextPage.containsKey("unrecognized"))
         assertEquals(firstPage.filterKeys { it != "cursor" }, nextPage.filterKeys { it != "cursor" })

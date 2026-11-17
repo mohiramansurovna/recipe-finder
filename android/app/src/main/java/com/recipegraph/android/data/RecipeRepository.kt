@@ -93,7 +93,7 @@ interface RecipeDataSource {
     suspend fun verify(email: String, code: String): ApiResult<Unit>
     suspend fun resendVerification(email: String): ApiResult<Unit>
     suspend fun parseIngredients(text: String): ApiResult<ParseResult>
-    suspend fun searchRecipes(criteria: ParseResult, cursor: String?): ApiResult<SearchResult>
+    suspend fun searchRecipes(criteria: ParseResult, minRating: Int?, cursor: String?): ApiResult<SearchResult>
     suspend fun getRecipe(recipeId: String): ApiResult<RecipeDetail>
 
     /** True when a device session is stored; it is verified by the next authenticated call. */
@@ -138,8 +138,8 @@ class RecipeRepository(
     override suspend fun parseIngredients(text: String): ApiResult<ParseResult> =
         call("POST", "/api/ingredients/parse", mapOf("text" to text), mapper = JSONObject::toParseResult)
 
-    override suspend fun searchRecipes(criteria: ParseResult, cursor: String?): ApiResult<SearchResult> =
-        call("POST", "/api/recipes/search", searchRequestPayload(criteria, cursor), mapper = JSONObject::toSearchResult)
+    override suspend fun searchRecipes(criteria: ParseResult, minRating: Int?, cursor: String?): ApiResult<SearchResult> =
+        call("POST", "/api/recipes/search", searchRequestPayload(criteria, minRating, cursor), mapper = JSONObject::toSearchResult)
 
     override suspend fun getRecipe(recipeId: String): ApiResult<RecipeDetail> =
         call("GET", "/api/recipes/${recipeId.encodePathSegment()}", null) { it.toRecipeDetail() }
@@ -326,12 +326,13 @@ internal fun JSONObject.toRecipeDetail(): RecipeDetail {
     )
 }
 
-internal fun searchRequestPayload(criteria: ParseResult, cursor: String?): Map<String, Any?> = mapOf(
+internal fun searchRequestPayload(criteria: ParseResult, minRating: Int?, cursor: String?): Map<String, Any?> = mapOf(
     "included" to criteria.included,
     "excluded" to criteria.excluded,
     "excludedCategories" to criteria.excludedCategories,
     "cuisines" to emptyList<String>(),
     "maxMinutes" to null,
+    "minRating" to minRating,
     "cursor" to cursor
 )
 

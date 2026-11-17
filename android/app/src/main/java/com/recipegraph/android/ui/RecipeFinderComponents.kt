@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -365,6 +367,54 @@ fun RfRecipeCard(
         }
         extra?.invoke(this)
     }
+}
+
+/** Shown in place of the Search button while the first (uncached, slower) search runs. */
+@Composable
+fun RfSearchProgress() {
+    var slow by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(3_000)
+        slow = true
+    }
+    val message = if (slow) {
+        "Still working. The first search for a new set of ingredients can take a few seconds."
+    } else {
+        "Finding recipes…"
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("search-progress")
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(32.dp),
+            color = Rf.colors.primary,
+            trackColor = Rf.colors.primaryContainer
+        )
+        RfBody(message)
+    }
+}
+
+/** Single-choice pill used for the minimum rating filter. */
+@Composable
+fun RfChoiceChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val c = Rf.colors
+    val bg = if (selected) c.primaryContainer else c.card
+    val fg = if (selected) c.onPrimaryContainer else c.text
+    Box(
+        modifier = Modifier
+            .height(48.dp)
+            .clip(RfShapes.small)
+            .background(bg)
+            .border(1.dp, if (selected) c.primary else c.outlineControl, RfShapes.small)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) { Text(label, style = RfType.label, color = fg) }
 }
 
 enum class RfChipKind { Recognized, Unrecognized, Excluded }

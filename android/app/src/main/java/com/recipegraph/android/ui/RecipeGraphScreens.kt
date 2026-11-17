@@ -245,6 +245,9 @@ fun SearchScreen(
     ingredientsText: String,
     parsedIngredients: ParseResult,
     isReadyToSearch: Boolean,
+    isSearching: Boolean,
+    minRating: Int?,
+    onMinRatingChange: (Int?) -> Unit,
     onIngredientsChange: (String) -> Unit,
     onParse: () -> Unit,
     onUpdateTerm: (String, String, String) -> Unit,
@@ -301,12 +304,20 @@ fun SearchScreen(
                 RfNotice(unrecognizedNotice(parsedIngredients))
             }
         }
+        RfCaption("MINIMUM RATING")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RfChoiceChip("Any", minRating == null) { onMinRatingChange(null) }
+            RfChoiceChip("3+ stars", minRating == 3) { onMinRatingChange(3) }
+            RfChoiceChip("4+ stars", minRating == 4) { onMinRatingChange(4) }
+        }
+        if (minRating != null) RfBodySmall("Recipes without ratings are hidden.")
         errorMessage?.let { RfNotice(it) }
         if (!isReadyToSearch && ingredientsText.isNotBlank()) {
             RfBodySmall("Parse your ingredients before searching.")
         }
-        RfButton("Search recipes", onSearch, enabled = isReadyToSearch)
-        if (ingredientsText.isNotBlank() || parsedIngredients.hasTerms) {
+        if (isSearching) RfSearchProgress()
+        else RfButton("Search recipes", onSearch, enabled = isReadyToSearch)
+        if (!isSearching && (ingredientsText.isNotBlank() || parsedIngredients.hasTerms)) {
             RfButton("Clear search", onClearSearch, style = RfButtonStyle.Text)
         }
         RfCaption("INTERNAL DEMO · SAMPLE DATA", center = true)

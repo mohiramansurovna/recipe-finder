@@ -88,6 +88,8 @@ fun RecipeGraphApp(
     var searchResults by remember { mutableStateOf<List<RecipeSummary>>(emptyList()) }
     var searchCursor by remember { mutableStateOf<String?>(null) }
     var loadingMore by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
+    var minRating by rememberSaveable { mutableStateOf<Int?>(null) }
     var recipeDetail by remember { mutableStateOf<RecipeDetail?>(null) }
 
     fun returnToSignIn(message: String?) {
@@ -255,6 +257,13 @@ fun RecipeGraphApp(
                     ingredientsText = searchIngredients,
                     parsedIngredients = parsedIngredients,
                     isReadyToSearch = parsedText == searchIngredients && searchIngredients.isNotBlank(),
+                    isSearching = searching,
+                    minRating = minRating,
+                    onMinRatingChange = {
+                        minRating = it
+                        searchResults = emptyList()
+                        searchCursor = null
+                    },
                     onIngredientsChange = {
                         searchIngredients = it
                         parsedText = null
@@ -289,21 +298,25 @@ fun RecipeGraphApp(
                         searchCursor = null
                     },
                     onSearch = {
-                        if (parsedText == searchIngredients && searchIngredients.isNotBlank()) {
+                        if (parsedText == searchIngredients && searchIngredients.isNotBlank() && !searching) {
                             apiError = null
                             searchResults = emptyList()
                             searchCursor = null
-                            scope.launch {
-                                isLoading = true
-                                when (val result = repository.searchRecipes(parsedIngredients, null)) {
-                                    is ApiResult.Success -> {
-                                        searchResults = result.value.recipes
-                                        searchCursor = result.value.nextCursor
-                                        navController.navigate("results")
+                            if (parsedIngredients.included.isEmpty()) {
+                                apiError = "Add at least one ingredient to search."
+                            } else {
+                                scope.launch {
+                                    searching = true
+                                    when (val result = repository.searchRecipes(parsedIngredients, minRating, null)) {
+                                        is ApiResult.Success -> {
+                                            searchResults = result.value.recipes
+                                            searchCursor = result.value.nextCursor
+                                            navController.navigate("results")
+                                        }
+                                        is ApiResult.Failure -> apiError = result.error.message
                                     }
-                                    is ApiResult.Failure -> apiError = result.error.message
+                                    searching = false
                                 }
-                                isLoading = false
                             }
                         }
                     },
@@ -338,7 +351,7 @@ fun RecipeGraphApp(
                             scope.launch {
                                 apiError = null
                                 loadingMore = true
-                                when (val result = repository.searchRecipes(parsedIngredients, cursor)) {
+                                when (val result = repository.searchRecipes(parsedIngredients, minRating, cursor)) {
                                     is ApiResult.Success -> {
                                         searchResults = searchResults + result.value.recipes
                                         searchCursor = result.value.nextCursor
