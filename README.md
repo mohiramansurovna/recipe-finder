@@ -68,7 +68,9 @@ it is capped by `REDIS_MAXMEMORY` with `allkeys-lru` eviction, entries expire af
 `SEARCH_CACHE_IDLE_SECONDS` (default 300) without use and are rebuilt after
 `SEARCH_CACHE_MAX_AGE_SECONDS` (default 86400). Sessions, refresh tokens and rate
 limits stay in Neo4j. Without `REDIS_URL`, or if Redis is down, search queries
-Neo4j directly. The demo AWS stack does not include Redis.
+Neo4j directly. The demo stack runs the same Redis as one more internal container
+on the existing instance (128 MB, no persistence, no published port), so it needs no
+Terraform change; redeploying the demo images picks it up.
 Mailpit's SMTP port and web inbox bind only to host loopback; the API connects to
 its internal `mailpit:1025` service. Local signup does not need Resend credentials
 or a verified sender domain. Set a random `VERIFICATION_CODE_SECRET` of at least

@@ -1,6 +1,18 @@
 name: recipe-graph-demo
 
 services:
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # Search cache only: no persistence, bounded memory, least-recently-used eviction.
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    mem_limit: 192m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   neo4j:
     image: neo4j:5.26-community
     restart: unless-stopped
@@ -60,11 +72,14 @@ services:
     depends_on:
       account-migration:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env.demo}"
       NEO4J_DATABASE: neo4j
+      REDIS_URL: redis://redis:6379
       EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER=resend in .env.demo}"
       RESEND_API_KEY: "${RESEND_API_KEY:?Set RESEND_API_KEY in .env.demo}"
       VERIFICATION_CODE_SECRET: "${VERIFICATION_CODE_SECRET:?Set VERIFICATION_CODE_SECRET in .env.demo}"
