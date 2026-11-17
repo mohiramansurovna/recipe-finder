@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "com.recipegraph.android.app-release-60:/xml_backup_rules.xml.flat",
+        "source": "com.recipegraph.android.app-main-61:/xml/backup_rules.xml"
+    }
+]

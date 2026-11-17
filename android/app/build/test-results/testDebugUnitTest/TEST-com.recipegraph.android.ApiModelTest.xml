@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.recipegraph.android.ApiModelTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-11-16T13:14:55" hostname="Pretty3" time="0.253">
+  <properties/>
+  <testcase name="searchResponseUsesDocumentedNextCursorAndFitFields" classname="com.recipegraph.android.ApiModelTest" time="0.055"/>
+  <testcase name="expiredAccessTokenRefreshesOnceReplacesBothTokensAndRetries" classname="com.recipegraph.android.ApiModelTest" time="0.14"/>
+  <testcase name="rejectedRefreshClearsSessionAndRequiresSignIn" classname="com.recipegraph.android.ApiModelTest" time="0.002"/>
+  <testcase name="searchRequestUsesBackendCriteriaAndNextCursor" classname="com.recipegraph.android.ApiModelTest" time="0.002"/>
+  <testcase name="detailResponseKeepsOptionalDataAndOnlyAnonymousRatingValues" classname="com.recipegraph.android.ApiModelTest" time="0.018"/>
+  <testcase name="offlineRefreshKeepsSessionSoItCanBeRetriedLater" classname="com.recipegraph.android.ApiModelTest" time="0.012"/>
+  <testcase name="notFoundAndUnavailableErrorsRemainDistinct" classname="com.recipegraph.android.ApiModelTest" time="0.0"/>
+  <testcase name="signInStoresTokensOnlyOnSuccess" classname="com.recipegraph.android.ApiModelTest" time="0.005"/>
+  <testcase name="signOutClearsLocalSessionEvenWhenServerIsUnreachable" classname="com.recipegraph.android.ApiModelTest" time="0.003"/>
+  <testcase name="parsedUnknownTermsRemainEditableAndCanBeCorrected" classname="com.recipegraph.android.ApiModelTest" time="0.001"/>
+  <testcase name="favoritesAndOwnRatingResponsesParse" classname="com.recipegraph.android.ApiModelTest" time="0.001"/>
+  <testcase name="protectedCallsWithoutASessionNeverReachTheNetwork" classname="com.recipegraph.android.ApiModelTest" time="0.001"/>
+  <testcase name="registrationAndVerificationValidationMatchBackendContracts" classname="com.recipegraph.android.ApiModelTest" time="0.003"/>
+  <testcase name="deleteAccountSendsConfirmBodyAndClearsSessionOnlyOnSuccess" classname="com.recipegraph.android.ApiModelTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
