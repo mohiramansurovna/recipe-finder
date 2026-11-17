@@ -56,7 +56,7 @@ fun WelcomeScreen(
         Button(onClick = onSignInClick, modifier = Modifier.fillMaxWidth().testTag("welcome-signin")) { Text("Sign in") }
         Button(onClick = onOpenDemo, modifier = Modifier.fillMaxWidth()) { Text("Demo safety") }
         Text(
-            "Dataset attribution wording must be confirmed before the demo is shared.",
+            "INTERNAL DEMO  ·  SAMPLE DATA ONLY",
             style = MaterialTheme.typography.bodySmall
         )
     }

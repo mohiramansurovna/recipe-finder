@@ -58,7 +58,7 @@ context:
 - [x] `android/` -- Add typed API/data/repository boundaries for implemented backend routes and explicit unavailable states for unresolved contracts -- avoid fake success while backend work proceeds.
 - [x] `android/` -- Wire sign-in, Keystore token storage, refresh-on-expiry, favorites, personal ratings, sign-out, and account deletion against `docs/api-contract.md` -- backend routes now exist on main.
 - [x] `android/` -- Implement input correction, ranking/pagination, loading/error/empty states, device-local theme preference, and accessibility behavior -- preserve the PRD's user and privacy guarantees without simulating unsupported sessions.
-- [x] `android/` -- Add focused unit/UI tests and setup instructions -- make screen state, error handling, API configuration, and build reproducible. Unit tests pass locally; instrumentation tests compile but have not been run on the emulator.
+- [x] `android/` -- Add focused unit/UI tests and setup instructions -- make screen state, error handling, API configuration, and build reproducible. Unit tests pass locally; instrumentation tests pass on the emulator.
 
 **Acceptance Criteria:**
 - Given a 393 x 852 dp phone, when the app is opened, then its in-scope screens match the corresponding Figma mobile layouts and navigation.
@@ -72,13 +72,13 @@ context:
 
 ## Implementation Notes
 
-The Android project and all API-backed flows are implemented, including sign-in, Keystore-encrypted session storage, single-flight refresh on `SESSION_EXPIRED`, favorites, personal ratings, sign-out, and account deletion (DELETE with `{"confirm":true}`). The UI is still unstyled scaffold pending the Figma handoff. API base URL configuration is via Gradle property `apiBaseUrl`; local cleartext is limited to emulator/localhost hosts. Dataset attribution wording remains pending confirmation against the source terms.
+The Android project and all API-backed flows are implemented, including sign-in, Keystore-encrypted session storage, single-flight refresh on `SESSION_EXPIRED`, favorites, personal ratings, sign-out, and account deletion (DELETE with `{"confirm":true}`). The UI is still unstyled scaffold pending the Figma handoff. API base URL configuration is via Gradle property `apiBaseUrl`; local cleartext is limited to emulator/localhost hosts. Minimum Android version is 13 (API 33). Per the human, the dataset is used in full for the internal demo and attribution is the demo notice "INTERNAL DEMO · SAMPLE DATA ONLY".
 
 ## Verification
 
 **Commands:**
 - `cd android && ./gradlew testDebugUnitTest assembleDebug compileDebugAndroidTestKotlin --no-daemon` -- passed.
-- `cd android && ./gradlew connectedDebugAndroidTest --no-daemon` -- not run yet.
+- `connectedDebugAndroidTest` on a Windows Android 13 emulator (Pixel 6, WHPX) -- passed: 4 tests, 0 failures.
 - `npm run check` -- passed: lint, type-check, and Vitest (171 passed, 2 skipped).
 
 **Manual checks:**

@@ -31,6 +31,8 @@ Use an `https://` URL for the demo build. Cleartext traffic is allowed only for 
 
 ## Run
 
+The Android toolchain (JDK 17, SDK, emulator) is installed on Windows, not in WSL: WSL's default memory cap is too small for Gradle plus an emulator alongside Docker and Neo4j. The backend still runs in WSL/Docker; the Windows emulator reaches it at `http://10.0.2.2:8080` through WSL's localhost forwarding. Gradle on a `\\wsl$` path is slow, so build from a Windows-side copy of `android/` (for example `robocopy <repo>\android C:\dev\recipe-finder-android /MIR /XD build .gradle /XF local.properties`) and keep git in WSL. Target is Android 13 (minSdk 33).
+
 After installing the Android SDK and Java 17+, run:
 
 ```bash

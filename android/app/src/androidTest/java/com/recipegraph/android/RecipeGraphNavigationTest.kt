@@ -1,12 +1,13 @@
 package com.recipegraph.android
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.recipegraph.android.data.AccountProfile
 import com.recipegraph.android.data.ApiError
@@ -25,7 +26,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class RecipeGraphNavigationTest {
     @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
+    // Hosts only the fake-backed app, so the tests never touch the real MainActivity, Keystore session or network.
+    val composeRule = createComposeRule()
 
     @Test
     fun successfulRegistrationOpensVerificationScreen() {
@@ -62,7 +64,7 @@ class RecipeGraphNavigationTest {
         composeRule.onNodeWithTag("register-submit").performClick()
 
         composeRule.onNodeWithText("An account with that email or username already exists.").assertExists()
-        composeRule.onNodeWithText("Create account").assertExists()
+        composeRule.onNodeWithTag("register-submit").assertExists()
     }
 
     @Test
@@ -97,7 +99,7 @@ class RecipeGraphNavigationTest {
     }
 
     private fun launchApp(repository: RecipeDataSource) {
-        val themeStore = ThemePreferenceStore(composeRule.activity)
+        val themeStore = ThemePreferenceStore(ApplicationProvider.getApplicationContext())
         composeRule.setContent {
             MaterialTheme {
                 RecipeGraphApp(repository = repository, themeStore = themeStore)
