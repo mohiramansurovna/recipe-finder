@@ -25,7 +25,7 @@ context:
 
 **Always:** Keep routes, error envelope, validation style, rate limits, database privacy and the criteria-bound cursor concept. Keep feature logic in application services behind core contracts; routes do not query Neo4j; adapters implement ports wired at the composition root. Rank order is deterministic. Any graph change is applied by the import and an idempotent migration, and recorded so an older graph is detected. Keep datasets, secrets and deployment state out of Git.
 
-**Never:** Cache per-account data, cache across a graph re-import, expose the database, or provision AWS resources as part of this work. Do not edit archived or existing specs.
+**Never:** Cache per-account data, move sessions, refresh tokens or rate limits out of Neo4j, cache across a graph re-import, expose the database, or provision AWS resources as part of this work. Do not edit archived or existing specs.
 
 ## I/O & Edge-Case Matrix
 
@@ -42,7 +42,7 @@ context:
 | Later page | Cursor from the same criteria | Next page of the same ordering; served from cache when warm, correct when cold | Cursor for different criteria or an old-format cursor: existing client error |
 | Same search, different wording | "chicken, garlic" vs "garlic, chicken", duplicates | Same cache entry and same results | -- |
 | Only `maxMinutes` or `minRating` changes | Same ingredients | Same cache entry, different in-memory filter | The cursor is bound to all criteria, so a cursor from the other filter value is rejected |
-| Cache expiry or restart | No request for the entry for 1 minute, evicted, or restart | Recomputed with identical results | Cache failure falls back to the uncached query |
+| Cache expiry, eviction or Redis down | No request for the entry for 1 minute, evicted by `maxmemory`, Redis restarted or unreachable | Recomputed with identical results | Cache failure falls back to the uncached query; never an error |
 
 </frozen-after-approval>
 
@@ -63,9 +63,10 @@ context:
 1. **Candidate query (database).** From the included ingredient nodes, count per recipe: `matched` (distinct included ingredients used) and `total` (`COUNT { (recipe)-[:USES]->() }`), so `missing = total − matched`. Apply excluded ingredients and excluded categories and cuisines in this query (all hide recipes). Return `id`, `matched`, `missing`, `minutes`, `ratingAverage` per candidate. No `ORDER BY` and no `LIMIT` in the database.
 2. **Service (memory).** Filter by `maxMinutes` and `minRating`, sort by `matched` desc, `missing` asc, `id` asc, compute `totalCount` as the filtered size, and cut the page after the cursor position. Then fetch names and ingredient lists for the page's ≤20 IDs with one lookup by ID (index) for the response, so cached rows stay compact. The old count query and rank-order check against the database are removed; the service asserts its own ordering in tests.
 3. **Cursor.** Position is `(matched, missing, id)` plus the fingerprint of all criteria (included, excluded, excluded categories, cuisines, `maxMinutes`, `minRating`). Cursor version moves to 2; version-1 cursors return the existing invalid-cursor error.
-4. **Cache.** In-process, behind a core port, **sliding 1-minute expiry**: each hit resets the timer; an entry is dropped after a minute without requests (lazy check plus an unref'd periodic sweep). Max **20 entries** (least recently used evicted) and a per-entry row cap set from the benchmark. Key is the deduplicated, sorted canonical `included`, `excluded`, `excludedCategories` and `cuisines` plus the graph identity (the cursor fingerprint minus `maxMinutes` and `minRating`), so word order, duplicates and page position never matter. `maxMinutes` and `minRating` are applied in memory so changing them reuses the entry. Per-account data is never cached. A miss or cache error recomputes; ranking depends only on the static graph, so a sliding window cannot serve stale scores, but rating averages may be up to the entry's life old.
+4. **Cache (Redis).** A Redis service shared by all API instances holds the candidate lists behind a core cache port, with an in-process fallback to the uncached query when Redis is unavailable. Expiry is **sliding 1 minute**: each hit refreshes the entry's TTL (`GETEX ... EX 60`), and Redis removes it after a minute without requests. There is no entry-count cap; memory is bounded by the TTL, a per-entry row cap (set from the benchmark) and a configured Redis `maxmemory` with `allkeys-lru` eviction, so a burst of distinct searches evicts the least recently used instead of failing. Entries are stored compactly (typed binary rather than JSON) to keep a ~50,000-row list to about a megabyte. Key is the deduplicated, sorted canonical `included`, `excluded`, `excludedCategories` and `cuisines` plus the graph identity (the cursor fingerprint minus `maxMinutes` and `minRating`), so word order, duplicates and page position never matter. `maxMinutes` and `minRating` are applied in memory after reading an entry so changing them reuses it. Per-account data is never cached. The cache only ever holds data derivable from the graph; a miss, Redis outage or flush recomputes and is never an error. Ranking depends only on the static graph, so the sliding window cannot serve stale scores; rating averages may be up to the entry's life old.
+   **Not in Redis:** accounts, sessions, refresh-token hashes and rate-limit counters stay in Neo4j. Sessions last 30 days and rotate with replay detection inside a Neo4j transaction, and losing Redis must never sign anyone out.
 5. **Rating average.** Store `ratingAverage` and `ratingCount` on `Recipe`, set by the import/migration and recomputed from the recipe's own ratings inside the same transaction whenever a rating is set or removed. The value equals what recipe detail shows: the average of individual values above 0, otherwise the dataset `aggregateRating`, otherwise null. Rating changes require the new rating model from `spec-rating-anonymity.md`, so that spec lands first.
-6. **Why not Redis.** One API instance, a 1-minute cache and memory-sized data; Redis would add a service and cost. The core port allows it later.
+6. **Infrastructure.** Redis is added to the local Compose files (cache only, no persistence required, `maxmemory` and `allkeys-lru` set). Adding it to the demo deployment is billable infrastructure and is out of scope until the README deployment review and explicit operator approval are complete.
 
 ## Code Map
 
@@ -76,7 +77,7 @@ context:
 - `api/src/interface/http/schemas/recipes.schemas.ts` and `routes/recipes.routes.ts` -- `minRating` (3 or 4), required `included`, error text.
 - `api/src/infrastructure/neo4j/repositories/accounts.neo4j.repository.ts` -- rating writes maintain `ratingAverage` and `ratingCount`.
 - `scripts/import-data.ts` and a new idempotent migration modeled on `scripts/migrate-account-schema.ts` -- populate the rating fields and record completion.
-- `docs/api-contract.md` and `README.md` -- request/response and migration notes.
+- `docker-compose*.yml`, `.env` example and `README.md` -- Redis service, `REDIS_URL`, memory limit; `docs/api-contract.md` -- request/response notes.
 - Android (`android/`) -- separate follow-up: first-search loading text and a minimum-rating control.
 
 ## Tasks & Acceptance
@@ -85,14 +86,14 @@ context:
 - [ ] `api/` -- Add a reproducible benchmark (rare, common, mixed, exclusions, filters, deep pages) and record baseline timings before changing code.
 - [ ] `api/` -- Implement the candidate query, in-memory sort/filter/paging, cursor v2 and `minRating`, with required `included` and the new error.
 - [ ] `api/`, `scripts/` -- Add `ratingAverage` and `ratingCount` (import, idempotent migration, rating writes, completion record, unavailable error for `minRating` on an unmigrated graph).
-- [ ] `api/` -- Add the sliding-expiry LRU cache behind a core port with safe fallback.
-- [ ] Tests -- Ordering (matched desc, missing asc, ID asc), no zero-match recipes, excluded ingredient and category hiding, cuisine OR, `maxMinutes` and `minRating` filters with unrated handling, `totalCount`, deep pagination, old cursor and criteria-mismatch errors, required-ingredient error; cache hit across word order, duplicates, page positions and changed time/rating filters, miss when ingredients, exclusions or cuisines differ, sliding expiry with fake timers, LRU eviction at 20, fallback.
+- [ ] `api/` -- Add the Redis-backed sliding-expiry cache behind a core port, with Compose service, configuration and safe fallback.
+- [ ] Tests -- Ordering (matched desc, missing asc, ID asc), no zero-match recipes, excluded ingredient and category hiding, cuisine OR, `maxMinutes` and `minRating` filters with unrated handling, `totalCount`, deep pagination, old cursor and criteria-mismatch errors, required-ingredient error; cache hit across word order, duplicates, page positions and changed time/rating filters, miss when ingredients, exclusions or cuisines differ, sliding TTL refresh on hit and expiry after one idle minute (Redis integration test), memory-limit eviction, Redis-down fallback, sessions and rate limits unaffected.
 - [ ] `docs/api-contract.md`, `README.md` -- document the new behavior, migration step and benchmark command.
 
 **Acceptance Criteria:**
 - Given any benchmark request, when searched, then results follow the new ordering and filters, and every page and `nextCursor` is consistent across pages.
 - Given a typical first search on the full dataset, when measured with the benchmark, then it is reported against the recorded baseline and the ~1 s PRD target (confirmed or revised from the measurement).
-- Given a warm entry, when later pages or changed time/rating filters are requested, then candidates are not re-queried; after one idle minute, eviction or restart they are recomputed with identical results.
+- Given a warm entry, when later pages or changed time/rating filters are requested, then candidates are not re-queried; after one idle minute, eviction or a Redis restart they are recomputed with identical results.
 - Given a re-import, when search runs, then no cached results from the previous graph are served.
 - Given no included ingredient, then the API returns the explicit client error.
 
