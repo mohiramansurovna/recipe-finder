@@ -64,6 +64,21 @@ context:
 | cuisine + maxMinutes filter | 1.0 s |
 | 5 pages in a row (100 recipes) | 25.1 s |
 
+**After (`BENCHMARK_RUNS=5`, 2026-11-17, same local Neo4j, no cache, median ms; each deep-pages page re-queries because the benchmark bypasses Redis):**
+
+| Scenario | Median | Rows |
+|---|---|---|
+| rare x1 | 18 | 3 |
+| common x1 ("onion") | 489 | 39,065 |
+| common x3 / very common x5 / mixed rare+common | 1,241 / 1,618 / 1,062 | up to 153,889 |
+| exclusions (1 ingredient + 1 category) | 2,935 | - |
+| filters | 443 | - |
+| 5 pages in a row | 5,683 (about one query when cached) | - |
+
+- No duplicate `USES` edges exist, so `missing = degree - matched` is exact.
+- Largest measured cache entry (5 very common ingredients, 153,767 rows): 3.5 MB JSON, 1.0 MB gzipped. An entry cannot exceed the 231,636 recipes (about 1.6 MB), so no per-entry row cap is added; Redis `maxmemory` with `allkeys-lru` bounds the total.
+- The ~1 s target holds for typical first searches (up to three ingredients). Five very common ingredients take about 1.6 s and the exclusion scenario 2.9 s; both are cold-cache costs and later pages are served from Redis. Exclusion cost is the open follow-up.
+
 - `Ingredient.name` and `Recipe.id` are already uniquely indexed. The cost is the old query starting from every recipe, not finding ingredients.
 - Recipes average 9 ingredients; "onion" alone is in 39,065 recipes and a three-ingredient search touches ~53,000. That bounds the candidate list and the memory per cache entry.
 - No graph change is needed for the search itself. The only graph change is the rating average below.
