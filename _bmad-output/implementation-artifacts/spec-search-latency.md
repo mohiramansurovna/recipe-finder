@@ -54,6 +54,16 @@ context:
 | Existing filtered `COUNT_QUERY`, run on every page | ~0.5–1.1 s |
 | Prototype: start from included ingredient nodes, count matches per recipe, use relationship degree as the recipe's total | ~0.9–1.1 s (3 rare, 3 common, 5 very common ingredients) |
 
+**Baseline (`npm run benchmark:search`, current implementation, 2026-11-17, local Neo4j, median of 3, one page of 20 including the count query):**
+
+| Scenario | Median |
+|---|---|
+| rare x1 / common x1 | 6.3 s / 6.3 s |
+| common x3 / very common x5 / mixed rare+common | 5.2 s / 5.3 s / 5.3 s |
+| exclusions (1 ingredient + 1 category) | 27.5 s |
+| cuisine + maxMinutes filter | 1.0 s |
+| 5 pages in a row (100 recipes) | 25.1 s |
+
 - `Ingredient.name` and `Recipe.id` are already uniquely indexed. The cost is the old query starting from every recipe, not finding ingredients.
 - Recipes average 9 ingredients; "onion" alone is in 39,065 recipes and a three-ingredient search touches ~53,000. That bounds the candidate list and the memory per cache entry.
 - No graph change is needed for the search itself. The only graph change is the rating average below.
