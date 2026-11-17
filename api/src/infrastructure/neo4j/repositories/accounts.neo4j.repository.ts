@@ -860,7 +860,6 @@ export class Neo4jAccountsRepository implements AccountsRepository {
     }
 
     async setRating(command: RatingCommand): Promise<void> {
-        const ratingId = randomUUID();
         await withSession(this.driver, this.database, (session) =>
             session.executeWrite(async (transaction) => {
                 await lockAuthorizedAccount(
@@ -884,44 +883,21 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                     if (recipe.records.length === 0) throw new RecipeNotFoundError();
                     return;
                 }
-                const existing = await transaction.run(
-                    `MATCH (account:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating {recipeId: $recipeId})
-                     RETURN rating.id AS ratingId`,
-                    { accountId: command.accountId, recipeId: command.recipeId },
+                const updated = await transaction.run(
+                    `MATCH (:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating)<-[:HAS_RATING]-(:Recipe {id: $recipeId})
+                     SET rating.value = $value
+                     RETURN count(rating) AS updated`,
+                    { accountId: command.accountId, recipeId: command.recipeId, value: command.value },
                 );
-                const existingRecord = existing.records[0];
-                if (existingRecord !== undefined) {
-                    await transaction.run(
-                        `MATCH (account:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating {id: $ratingId})
-                         SET rating.value = $value, rating.updatedAt = $now`,
-                        {
-                            accountId: command.accountId,
-                            ratingId: asString(existingRecord.get('ratingId'), 'rating ID'),
-                            value: command.value,
-                            now: command.now,
-                        },
-                    );
-                    return;
-                }
+                const updatedRecord = updated.records[0];
+                if (updatedRecord !== undefined && asNumber(updatedRecord.get('updated')) > 0) return;
                 await transaction.run(
                     `MATCH (account:Account {id: $accountId})
                      MATCH (recipe:Recipe {id: $recipeId})
-                     CREATE (rating:Rating {
-                       id: $ratingId,
-                       recipeId: $recipeId,
-                       accountId: $accountId,
-                       value: $value,
-                       updatedAt: $now
-                     })
+                     CREATE (rating:Rating {value: $value})
                      CREATE (account)-[:HAS_RATING]->(rating)
                      CREATE (recipe)-[:HAS_RATING]->(rating)`,
-                    {
-                        accountId: command.accountId,
-                        recipeId: command.recipeId,
-                        ratingId,
-                        value: command.value,
-                        now: command.now,
-                    },
+                    { accountId: command.accountId, recipeId: command.recipeId, value: command.value },
                 );
             }),
         );
@@ -943,7 +919,7 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                 );
                 if (recipe.records.length === 0) throw new RecipeNotFoundError();
                 await transaction.run(
-                    `MATCH (account:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating {accountId: $accountId, recipeId: $recipeId})
+                    `MATCH (:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating)<-[:HAS_RATING]-(:Recipe {id: $recipeId})
                      DETACH DELETE rating`,
                     { accountId: command.accountId, recipeId: command.recipeId },
                 );
@@ -963,7 +939,7 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                 );
                 const result = await transaction.run(
                 `MATCH (recipe:Recipe {id: $recipeId})
-                 OPTIONAL MATCH (account:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating {accountId: $accountId, recipeId: $recipeId})
+                 OPTIONAL MATCH (:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating)<-[:HAS_RATING]-(recipe)
                  RETURN rating.value AS ratingValue`,
                 { accountId: command.accountId, recipeId: command.recipeId },
             );
@@ -989,20 +965,6 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                      DELETE favorite`,
                     { accountId },
                 );
-                const ratings = await transaction.run(
-                    `MATCH (account:Account {id: $accountId})-[:HAS_RATING]->(rating:Rating)
-                     RETURN rating.id AS ratingId`,
-                    { accountId },
-                );
-                for (const record of ratings.records) {
-                    const ratingId = asString(record.get('ratingId'), 'rating ID');
-                    await transaction.run(
-                        `MATCH (rating:Rating {id: $ratingId})
-                         SET rating.id = $anonymousId
-                         REMOVE rating.accountId, rating.userId`,
-                        { ratingId, anonymousId: randomUUID() },
-                    );
-                }
                 await transaction.run(
                     `MATCH (account:Account {id: $accountId})-[ownRating:HAS_RATING]->(:Rating)
                      DELETE ownRating`,

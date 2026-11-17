@@ -17,7 +17,6 @@ const ACCOUNT_CONSTRAINTS = [
     { label: 'RecoveryChallenge', property: 'id', name: 'recovery_challenge_id_unique' },
     { label: 'AccountSession', property: 'id', name: 'account_session_id_unique' },
     { label: 'GoogleIdentity', property: 'subject', name: 'google_identity_subject_unique' },
-    { label: 'Rating', property: 'id', name: 'rating_id_unique' },
     { label: 'AccountRateLimit', property: 'key', name: 'account_rate_limit_key_unique' },
 ] as const;
 
@@ -95,6 +94,15 @@ async function verifyRecipeGraph(session: import('neo4j-driver').Session): Promi
 export async function migrateAccountSchema(driver: Driver, database: string): Promise<void> {
     await withSession(driver, database, async (session) => {
         await verifyRecipeGraph(session);
+        await session.run('DROP CONSTRAINT rating_id_unique IF EXISTS');
+        await session.run(
+            `MATCH (rating:Rating)
+             WHERE rating.id IS NOT NULL OR rating.accountId IS NOT NULL OR rating.userId IS NOT NULL
+                OR rating.recipeId IS NOT NULL OR rating.updatedAt IS NOT NULL
+             CALL (rating) {
+               REMOVE rating.id, rating.accountId, rating.userId, rating.recipeId, rating.updatedAt
+             } IN TRANSACTIONS OF 10000 ROWS`,
+        );
         for (const constraint of ACCOUNT_CONSTRAINTS) {
             await session.run(
                 `CREATE CONSTRAINT ${constraint.name} IF NOT EXISTS FOR (node:${constraint.label}) REQUIRE node.${constraint.property} IS UNIQUE`,
