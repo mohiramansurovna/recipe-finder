@@ -54,7 +54,7 @@ context:
 
 **Execution:**
 - [x] `android/` -- Create a native Kotlin/Jetpack Compose app, theme, navigation, and configurable development/demo API endpoints -- establish the project required by FR-22 and FR-33.
-- [ ] `android/` -- Implement Figma-matched welcome, registration, verification, sign-in, search, results, recipe details, favorites, and account screens with responsive layouts -- cover the signed-in discovery journey and 360 dp width. Figma comparison and device-width checks remain blocked because the design handoff could not be retrieved.
+- [ ] `android/` -- Implement Figma-matched welcome, registration, verification, sign-in, search, results, recipe details, favorites, and account screens with responsive layouts -- cover the signed-in discovery journey and 360 dp width. Implemented from the Figma file (tokens, components, screens, rating and delete-confirmation flows). Only the Welcome screen has been compared visually on the emulator so far; remaining screens, dark mode and 360 dp still need a device pass. Dark-mode `outlineControl`/`error` colors are assumptions (not shown in Figma).
 - [x] `android/` -- Add typed API/data/repository boundaries for implemented backend routes and explicit unavailable states for unresolved contracts -- avoid fake success while backend work proceeds.
 - [x] `android/` -- Wire sign-in, Keystore token storage, refresh-on-expiry, favorites, personal ratings, sign-out, and account deletion against `docs/api-contract.md` -- backend routes now exist on main.
 - [x] `android/` -- Implement input correction, ranking/pagination, loading/error/empty states, device-local theme preference, and accessibility behavior -- preserve the PRD's user and privacy guarantees without simulating unsupported sessions.

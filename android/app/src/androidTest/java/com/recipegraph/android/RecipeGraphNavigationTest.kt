@@ -39,7 +39,9 @@ class RecipeGraphNavigationTest {
         composeRule.onNodeWithTag("register-password").performTextInput("long-enough-password")
         composeRule.onNodeWithTag("register-submit").performClick()
 
-        composeRule.onNodeWithText("Verify email").assertExists()
+        // "Verify email" is both the screen title and the submit button label.
+        composeRule.onNodeWithTag("verification-submit").assertExists()
+        assert(composeRule.onAllNodesWithText("Verify email").fetchSemanticsNodes().isNotEmpty())
         composeRule.onNodeWithText("Resend code").performClick()
         composeRule.onNodeWithText("If the account is eligible, a verification email will be sent.").assertExists()
         composeRule.onNodeWithTag("verification-code").performTextInput("12345678")

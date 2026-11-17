@@ -26,6 +26,7 @@ Use an `https://` URL for the demo build. Cleartext traffic is allowed only for 
 - Ranked recipe search with pagination and cursor reuse
 - Recipe detail, anonymous ratings, personal ratings (1-5), and favorites against the account API
 - Device-local theme preference storage
+- Figma-based design system (`ui/RecipeFinderTheme.kt`, `ui/RecipeFinderComponents.kt`) with light/dark themes and bottom navigation
 - Clear loading, validation, empty, unavailable, and not-found states
 - Accessibility labels and responsive 360 dp-safe layout behavior
 
