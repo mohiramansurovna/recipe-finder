@@ -21,6 +21,12 @@ known_hosts.demo
 data/raw/
 data/prepared/
 .terraform
+# Android build output
 .gradle/
 android/**/build/
+android/build/
+android/app/build/
+android/.gradle/
 android/local.properties
+android/.idea/
+*.apk

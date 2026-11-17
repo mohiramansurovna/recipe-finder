@@ -7,7 +7,6 @@ import { createApiApp } from "../api/src/app.js";
 import { Neo4jRecipesRepository } from "../api/src/infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
 import type {
   RecipeDetail,
-  RecipeSearchPage,
 } from "../api/src/core/recipes/recipes.types.js";
 import type { IngredientsRepository } from "../api/src/core/ingredients/ingredients.repository.js";
 import type { RecipesRepository } from "../api/src/core/recipes/recipes.repository.js";
@@ -36,8 +35,20 @@ class TestRecipeRepository implements RecipesRepository {
     return [];
   }
 
-  async search(): Promise<RecipeSearchPage> {
-    return { recipes: [], totalCount: 0, nextCursor: null };
+  async findSearchCandidates() {
+    return [];
+  }
+
+  async getSearchRecords() {
+    return [];
+  }
+
+  async getGraphIdentity() {
+    return "test-graph";
+  }
+
+  async isRatingFilterAvailable() {
+    return true;
   }
 
   async getRecipeDetail() {

@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from 'express';
 
 import {
+    IngredientsRequiredError,
     InvalidRecipeCuisineError,
+    RatingFilterUnavailableError,
     type RecipesService,
 } from '../../../application/services/recipes.service.js';
 import { InvalidRecipeSearchCursorError } from '../../../core/recipes/recipe-search.cursor.js';
@@ -32,6 +34,14 @@ export function createRecipesRouter(recipeService: RecipesService): Router {
         } catch (error) {
             if (error instanceof InvalidRecipeSearchCursorError) {
                 sendError(response, 400, 'INVALID_CURSOR', error.message);
+                return;
+            }
+            if (error instanceof IngredientsRequiredError) {
+                sendError(response, 400, 'INGREDIENTS_REQUIRED', error.message);
+                return;
+            }
+            if (error instanceof RatingFilterUnavailableError) {
+                next(searchUnavailable(error.message));
                 return;
             }
             if (error instanceof InvalidRecipeCuisineError) {

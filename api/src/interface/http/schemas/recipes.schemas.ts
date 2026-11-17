@@ -29,6 +29,7 @@ export const recipeSearchRequestSchema = z
             .union([z.literal(15), z.literal(30), z.literal(60)])
             .nullable()
             .default(null),
+        minRating: z.union([z.literal(3), z.literal(4)]).nullable().default(null),
         cursor: z.string().min(1).max(4096).nullable().default(null),
     })
     .strict();

@@ -385,12 +385,11 @@ describe('Neo4j account repository concurrency handling', () => {
         expect(queries[2]?.query).toContain('CREATE (session:AccountSession');
     });
 
-    it('keeps account deletion and rating anonymization in one authenticated managed transaction', async () => {
+    it('keeps account deletion and rating ownership removal in one authenticated managed transaction', async () => {
         const { repository, queries, session } = repositoryWith((query) => {
             if (query.includes('RETURN account.id AS accountId') && query.includes('session.active = true')) {
                 return [record({ accountId: 'account-id' })];
             }
-            if (query.includes('RETURN rating.id AS ratingId')) return [record({ ratingId: 'rating-id' })];
             return [];
         });
 
@@ -399,7 +398,7 @@ describe('Neo4j account repository concurrency handling', () => {
         expect(session.executeWrite).toHaveBeenCalledOnce();
         expect(queries[0]?.query).toContain('session.active = true');
         expect(queries.some(({ query }) => query.includes('DELETE favorite'))).toBe(true);
-        expect(queries.some(({ query }) => query.includes('REMOVE rating.accountId, rating.userId'))).toBe(true);
+        expect(queries.some(({ query }) => query.includes('SET rating.id') || query.includes('REMOVE rating'))).toBe(false);
         expect(queries.some(({ query }) => query.includes('DELETE ownRating'))).toBe(true);
         expect(queries.some(({ query }) => query.includes('DETACH DELETE account'))).toBe(true);
         expect(queries.at(-1)?.query).toContain('DETACH DELETE account');
@@ -560,7 +559,7 @@ describe('Neo4j account repository concurrency handling', () => {
             if (query.includes('MATCH (account:Account {id: $accountId})') && query.includes('MATCH (recipe:Recipe')) {
                 return [record({ accountId: 'account-id' })];
             }
-            if (query.includes('RETURN rating.id AS ratingId')) return [record({ ratingId: 'rating-id' })];
+            if (query.includes('RETURN count(rating) AS updated')) return [record({ updated: 1 })];
             return [];
         });
 
@@ -576,5 +575,6 @@ describe('Neo4j account repository concurrency handling', () => {
         expect(session.executeWrite).toHaveBeenCalledOnce();
         expect(queries.some(({ query }) => query.includes('SET rating.value = $value'))).toBe(true);
         expect(queries.some(({ query }) => query.includes('CREATE (rating:Rating'))).toBe(false);
+        expect(queries.some(({ query }) => query.includes('SET recipe.ratingAverage'))).toBe(true);
     });
 });

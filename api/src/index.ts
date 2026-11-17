@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import { Redis } from "ioredis";
 import neo4j from "neo4j-driver";
 import { z } from "zod";
 
@@ -10,6 +11,10 @@ import { Neo4jAccountsRepository } from "./infrastructure/neo4j/repositories/acc
 import { Argon2PasswordHasher } from "./infrastructure/accounts/argon2-password-hasher.js";
 import { createVerificationMailer, emailEnvironmentSchema } from "./infrastructure/accounts/email-config.js";
 import { createGoogleIdentityVerifier } from "./infrastructure/accounts/google-verifier.js";
+import {
+  RedisRecipeCandidateCache,
+  createIoredisCacheClient,
+} from "./infrastructure/cache/redis-recipe-candidate-cache.js";
 import { AccountsService } from "./application/services/accounts.service.js";
 
 const environmentSchema = z.object({
@@ -19,6 +24,9 @@ const environmentSchema = z.object({
   NEO4J_DATABASE: z.string().default("neo4j"),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   VERIFICATION_CODE_SECRET: z.string().min(32),
+  REDIS_URL: z.string().min(1).optional(),
+  SEARCH_CACHE_IDLE_SECONDS: z.coerce.number().int().min(1).default(300),
+  SEARCH_CACHE_MAX_AGE_SECONDS: z.coerce.number().int().min(1).default(86_400),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   GOOGLE_CLIENT_ID: z.string().trim().min(1).optional(),
   GOOGLE_CLIENT_IDS: z.string().trim().min(1).optional(),
@@ -42,6 +50,27 @@ async function main() {
     driver,
     environment.NEO4J_DATABASE,
   );
+  // Search cache only; sessions, tokens and rate limits stay in Neo4j. Without
+  // REDIS_URL, or when Redis is down, search queries the database directly.
+  const redis =
+    environment.REDIS_URL === undefined
+      ? undefined
+      : new Redis(environment.REDIS_URL, {
+          enableOfflineQueue: false,
+          maxRetriesPerRequest: 1,
+          commandTimeout: 500,
+          lazyConnect: false,
+        });
+  redis?.on("error", (error: Error) => {
+    console.error("Redis search cache error:", error.message);
+  });
+  const recipeCandidateCache =
+    redis === undefined
+      ? undefined
+      : new RedisRecipeCandidateCache(createIoredisCacheClient(redis), {
+          idleSeconds: environment.SEARCH_CACHE_IDLE_SECONDS,
+          maxAgeSeconds: environment.SEARCH_CACHE_MAX_AGE_SECONDS,
+        });
   const googleVerifier = createGoogleIdentityVerifier(environment);
   const accountsService = new AccountsService({
     repository: accountsRepository,
@@ -75,6 +104,7 @@ async function main() {
     accountsService,
     () => accountsRepository.assertReady(),
     environment.TRUST_PROXY_HOPS,
+    recipeCandidateCache,
   );
   const server = app.listen(environment.API_PORT, "0.0.0.0", () => {
     console.log(`Recipe Graph API listening on port ${environment.API_PORT}`);
@@ -83,6 +113,7 @@ async function main() {
   const shutdown = () => {
     server.close(() => {
       void driver.close();
+      redis?.disconnect();
     });
   };
   process.once("SIGINT", shutdown);

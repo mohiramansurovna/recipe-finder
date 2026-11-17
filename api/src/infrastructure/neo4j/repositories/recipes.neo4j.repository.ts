@@ -1,36 +1,27 @@
-import neo4j from "neo4j-driver";
 import type { Driver } from 'neo4j-driver';
 import type {
-    RecipeSearchCriteria,
+    RecipeCandidateFilters,
     RecipeDetail,
-    RecipeSearchPage,
-    ScoredRecipeSearchRecord,
+    RecipeSearchCandidate,
+    RecipeSearchRecord,
 } from '../../../core/recipes/recipes.types.js';
 import { RecipesRepository } from '../../../core/recipes/recipes.repository.js';
-import { RecipesMapper } from '../../mappers/recipes.mapper.js';
 import {
-    compareRecipeSearchPositions,
-    decodeRecipeSearchCursor,
-    encodeRecipeSearchCursor,
-    recipeSearchFingerprint,
-} from '../../../core/recipes/recipe-search.cursor.js';
-import {
-    readAggregateRating,
     readStringArray,
     readMinutes,
+    readAggregateRating,
     readOptionalStrings,
     readRatings,
     readString,
-    readTotalCount,
     readScore,
 } from '../neo4j-readers.js';
 import { withSession } from '../neo4j-sessions.js';
 import {
-    COUNT_QUERY,
+    CANDIDATES_QUERY,
     GET_RECIPE_QUERY,
-    PAGE_SIZE,
+    GRAPH_STATE_QUERY,
     RECIPE_DETAIL_QUERY,
-    SEARCH_QUERY,
+    SEARCH_RECORDS_QUERY,
 } from '../queries/recipes.queries.js';
 
 export class Neo4jRecipesRepository implements RecipesRepository {
@@ -46,75 +37,55 @@ export class Neo4jRecipesRepository implements RecipesRepository {
         });
     }
 
-    async search(criteria: RecipeSearchCriteria): Promise<RecipeSearchPage> {
-        const fingerprint = recipeSearchFingerprint(criteria);
-        const position =
-            criteria.cursor === null
-                ? null
-                : decodeRecipeSearchCursor(criteria.cursor, fingerprint);
+    async findSearchCandidates(filters: RecipeCandidateFilters): Promise<RecipeSearchCandidate[]> {
         return withSession(this.driver, this.database, async session => {
-            const filterParams = {
-                excludedCategories: [...new Set(criteria.excludedCategories)],
-                cuisines: [...new Set(criteria.cuisines)],
-                maxMinutes: criteria.maxMinutes,
-            };
-            const countResult = await session.run(COUNT_QUERY, filterParams);
-            const totalCount = readTotalCount(countResult.records[0]);
-            const result = await session.run(SEARCH_QUERY, {
-                included: [...new Set(criteria.included)],
-                excluded: [...new Set(criteria.excluded)],
-                ...filterParams,
-                cursorMissing: position?.missingCount ?? null,
-                cursorMatched: position?.matchedCount ?? null,
-                cursorExcluded: position?.excludedCount ?? null,
-                cursorId: position?.id ?? null,
-                limit: neo4j.int(PAGE_SIZE + 1),
+            const result = await session.run(CANDIDATES_QUERY, {
+                included: [...new Set(filters.included)],
+                excluded: [...new Set(filters.excluded)],
+                excludedCategories: [...new Set(filters.excludedCategories)],
+                cuisines: [...new Set(filters.cuisines)],
             });
+            return result.records.map(record => ({
+                id: readString(record.get('id'), 'id'),
+                matched: readScore(record, 'matched'),
+                missing: readScore(record, 'missing'),
+                minutes: readMinutes(record.get('minutes')),
+                ratingAverage: readAggregateRating(record.get('ratingAverage')),
+            }));
+        });
+    }
 
-            const records: ScoredRecipeSearchRecord[] = result.records.map(record => {
-                const id = readString(record.get('id'), 'id');
-                return {
-                    recipe: {
-                        id,
-                        name: readString(record.get('name'), 'name'),
-                        minutes: readMinutes(record.get('minutes')),
-                        ingredientNames: readStringArray(record.get('ingredientNames')),
-                    },
-                    position: {
-                        id,
-                        missingCount: readScore(record, 'missingCount'),
-                        matchedCount: readScore(record, 'matchedCount'),
-                        excludedCount: readScore(record, 'excludedCount'),
-                    },
-                };
-            });
+    async getSearchRecords(ids: readonly string[]): Promise<RecipeSearchRecord[]> {
+        if (ids.length === 0) return [];
+        return withSession(this.driver, this.database, async session => {
+            const result = await session.run(SEARCH_RECORDS_QUERY, { ids: [...ids] });
+            return result.records.map(record => ({
+                id: readString(record.get('id'), 'id'),
+                name: readString(record.get('name'), 'name'),
+                minutes: readMinutes(record.get('minutes')),
+                ingredientNames: readStringArray(record.get('ingredientNames')),
+            }));
+        });
+    }
 
-            for (let index = 1; index < records.length; index += 1) {
-                const previous = records[index - 1];
-                const current = records[index];
-                if (
-                    previous !== undefined &&
-                    current !== undefined &&
-                    compareRecipeSearchPositions(previous.position, current.position) > 0
-                ) {
-                    throw new Error('Neo4j returned recipe results in an invalid rank order.');
-                }
-            }
-
-            const hasMore = records.length > PAGE_SIZE;
-            const pageRecords = records.slice(0, PAGE_SIZE);
-            const lastRecord = pageRecords.at(-1);
-            const nextCursor =
-                hasMore && lastRecord !== undefined
-                    ? encodeRecipeSearchCursor(lastRecord.position, fingerprint)
-                    : null;
-
+    private async readGraphState(): Promise<{ identity: string; ratingFieldsReady: boolean }> {
+        return withSession(this.driver, this.database, async session => {
+            const result = await session.run(GRAPH_STATE_QUERY);
+            const record = result.records[0];
+            if (record === undefined) throw new Error('Recipe import metadata is missing.');
             return {
-                recipes: pageRecords.map(({ recipe }) => RecipesMapper.toDomain(recipe, criteria)),
-                totalCount,
-                nextCursor,
+                identity: readString(record.get('identity'), 'graph identity'),
+                ratingFieldsReady: record.get('ratingFieldsReady') === true,
             };
         });
+    }
+
+    async getGraphIdentity(): Promise<string> {
+        return (await this.readGraphState()).identity;
+    }
+
+    async isRatingFilterAvailable(): Promise<boolean> {
+        return (await this.readGraphState()).ratingFieldsReady;
     }
 
     async getRecipeDetail(id: string): Promise<RecipeDetail | null> {

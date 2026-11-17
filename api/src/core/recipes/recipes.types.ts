@@ -4,7 +4,22 @@ export interface RecipeSearchCriteria {
     excludedCategories: readonly string[];
     cuisines: readonly string[];
     maxMinutes: number | null;
+    minRating: 3 | 4 | null;
     cursor: string | null;
+}
+
+/** Criteria that decide which recipes are candidates; time and rating filters are applied in memory. */
+export type RecipeCandidateFilters = Pick<
+    RecipeSearchCriteria,
+    'included' | 'excluded' | 'excludedCategories' | 'cuisines'
+>;
+
+export interface RecipeSearchCandidate {
+    id: string;
+    matched: number;
+    missing: number;
+    minutes: number | null;
+    ratingAverage: number | null;
 }
 
 export interface RecipeSearchRecord {
@@ -37,9 +52,4 @@ export interface RecipeDetail {
     ingredients: string[];
     cuisines: string[];
     ratings: { individual: number[]; aggregate: number | null };
-}
-
-export interface ScoredRecipeSearchRecord {
-    recipe: RecipeSearchRecord;
-    position: { missingCount: number; matchedCount: number; excludedCount: number; id: string };
 }

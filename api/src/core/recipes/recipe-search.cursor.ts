@@ -2,26 +2,25 @@ import { createHash } from "crypto";
 import { RecipeSearchCriteria } from "./recipes.types.js";
 
 export interface RecipeSearchPosition {
-  missingCount: number;
   matchedCount: number;
-  excludedCount: number;
+  missingCount: number;
   id: string;
 }
 
+/** Most matched first, then fewest missing, then recipe ID. */
 export function compareRecipeSearchPositions(
   left: RecipeSearchPosition,
   right: RecipeSearchPosition,
 ): number {
   return (
-    left.missingCount - right.missingCount ||
     right.matchedCount - left.matchedCount ||
-    left.excludedCount - right.excludedCount ||
+    left.missingCount - right.missingCount ||
     (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
   );
 }
 
 interface RecipeSearchCursor extends RecipeSearchPosition {
-  version: 1;
+  version: 2;
   fingerprint: string;
 }
 
@@ -32,28 +31,50 @@ export class InvalidRecipeSearchCursorError extends Error {
   }
 }
 
-export function recipeSearchFingerprint(
-  criteria: Pick<
-    RecipeSearchCriteria,
-    "included" | "excluded" | "excludedCategories" | "cuisines" | "maxMinutes"
-  >,
-): string {
-  const canonicalCriteria = JSON.stringify({
+type CandidateCriteria = Pick<
+  RecipeSearchCriteria,
+  "included" | "excluded" | "excludedCategories" | "cuisines"
+>;
+
+function canonicalCandidateCriteria(criteria: CandidateCriteria) {
+  return {
     included: [...new Set(criteria.included)].sort(),
     excluded: [...new Set(criteria.excluded)].sort(),
     excludedCategories: [...new Set(criteria.excludedCategories)].sort(),
     cuisines: [...new Set(criteria.cuisines)].sort(),
+  };
+}
+
+function digest(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("base64url");
+}
+
+/** Binds a cursor to every criterion, including the in-memory time and rating filters. */
+export function recipeSearchFingerprint(
+  criteria: CandidateCriteria & Pick<RecipeSearchCriteria, "maxMinutes" | "minRating">,
+): string {
+  return digest({
+    ...canonicalCandidateCriteria(criteria),
     maxMinutes: criteria.maxMinutes,
+    minRating: criteria.minRating,
   });
-  return createHash("sha256").update(canonicalCriteria).digest("base64url");
+}
+
+/** Cache key for candidate lists: ignores filters applied in memory and page position. */
+export function recipeCandidateCacheKey(criteria: CandidateCriteria, graphIdentity: string): string {
+  return `recipe-search:v1:${digest({ ...canonicalCandidateCriteria(criteria), graphIdentity })}`;
 }
 
 export function encodeRecipeSearchCursor(
   position: RecipeSearchPosition,
   fingerprint: string,
 ): string {
-  const cursor: RecipeSearchCursor = { version: 1, fingerprint, ...position };
+  const cursor: RecipeSearchCursor = { version: 2, fingerprint, ...position };
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 export function decodeRecipeSearchCursor(
@@ -73,17 +94,10 @@ export function decodeRecipeSearchCursor(
 
     const cursor = value as Partial<RecipeSearchCursor>;
     if (
-      cursor.version !== 1 ||
+      cursor.version !== 2 ||
       cursor.fingerprint !== expectedFingerprint ||
-      typeof cursor.missingCount !== "number" ||
-      !Number.isSafeInteger(cursor.missingCount) ||
-      cursor.missingCount < 0 ||
-      typeof cursor.matchedCount !== "number" ||
-      !Number.isSafeInteger(cursor.matchedCount) ||
-      cursor.matchedCount < 0 ||
-      typeof cursor.excludedCount !== "number" ||
-      !Number.isSafeInteger(cursor.excludedCount) ||
-      cursor.excludedCount < 0 ||
+      !isCount(cursor.matchedCount) ||
+      !isCount(cursor.missingCount) ||
       typeof cursor.id !== "string" ||
       cursor.id.length === 0
     ) {
@@ -91,9 +105,8 @@ export function decodeRecipeSearchCursor(
     }
 
     return {
-      missingCount: cursor.missingCount,
       matchedCount: cursor.matchedCount,
-      excludedCount: cursor.excludedCount,
+      missingCount: cursor.missingCount,
       id: cursor.id,
     };
   } catch (error) {

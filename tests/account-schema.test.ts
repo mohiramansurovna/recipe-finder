@@ -89,12 +89,31 @@ describe('account schema migration and readiness', () => {
         expect(queries.some((query) => query.startsWith('CREATE CONSTRAINT account_'))).toBe(false);
     });
 
+    it('drops the rating id constraint and strips identifying rating properties idempotently', async () => {
+        const { driver, queries } = makeDriver();
+        await migrateAccountSchema(driver, 'neo4j');
+        await migrateAccountSchema(driver, 'neo4j');
+        expect(queries.filter((query) => query === 'DROP CONSTRAINT rating_id_unique IF EXISTS')).toHaveLength(2);
+        const strip = queries.filter((query) => query.includes('REMOVE rating.id, rating.accountId'));
+        expect(strip).toHaveLength(2);
+        expect(strip[0]).toContain('rating.recipeId');
+        expect(strip[0]).toContain('rating.updatedAt');
+    });
+
+    it('backfills recipe rating averages and marks the graph ready', async () => {
+        const { driver, queries } = makeDriver();
+        await migrateAccountSchema(driver, 'neo4j');
+        expect(queries.some((query) => query.includes('SET recipe.ratingAverage'))).toBe(true);
+        expect(queries.some((query) => query.includes('SET metadata.ratingFieldsReady = true'))).toBe(true);
+    });
+
     it('creates account uniqueness constraints idempotently and validates readiness', async () => {
         const { driver, queries } = makeDriver();
         await migrateAccountSchema(driver, 'neo4j');
         await migrateAccountSchema(driver, 'neo4j');
         await expect(assertAccountSchemaReady(driver, 'neo4j')).resolves.toBeUndefined();
-        expect(queries.filter((query) => query.startsWith('CREATE CONSTRAINT'))).toHaveLength(18);
+        expect(queries.filter((query) => query.startsWith('CREATE CONSTRAINT'))).toHaveLength(16);
+        expect(queries.some((query) => query.includes('rating_id_unique') && query.startsWith('CREATE'))).toBe(false);
         expect(driver.verifyConnectivity).toHaveBeenCalledOnce();
     });
 

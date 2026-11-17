@@ -1,14 +1,33 @@
-export const PAGE_SIZE = 20;
-
 export const GET_RECIPE_QUERY = `MATCH (cuisine:Cuisine)
          RETURN cuisine.name AS name
          ORDER BY name`;
-export const ELIGIBILITY_FILTERS = `
-  ($maxMinutes IS NULL OR recipe.minutes <= $maxMinutes)
-  AND NOT EXISTS {
-    MATCH (recipe)-[:USES]->(:Ingredient)-[:IN_CATEGORY]->(category:IngredientCategory)
-    WHERE category.name IN $excludedCategories
-  }
+/**
+ * Candidates start from the included ingredient nodes (unique-indexed by name) and walk their
+ * USES relationships, so recipes sharing no included ingredient are never touched.
+ * Time and rating filters, ordering and paging happen in the service.
+ */
+export const CANDIDATES_QUERY = `
+CALL () {
+  UNWIND $excluded AS excludedName
+  MATCH (blockedIngredient:Ingredient {name: excludedName})
+  RETURN blockedIngredient.name AS name
+  UNION
+  MATCH (category:IngredientCategory)<-[:IN_CATEGORY]-(blockedIngredient:Ingredient)
+  WHERE category.name IN $excludedCategories
+  RETURN blockedIngredient.name AS name
+}
+WITH collect(name) AS blocked
+MATCH (ingredient:Ingredient)
+WHERE ingredient.name IN $included
+MATCH (recipe:Recipe)-[:USES]->(ingredient)
+WITH recipe, count(DISTINCT ingredient) AS matched, blocked
+WHERE (
+    size(blocked) = 0
+    OR NOT EXISTS {
+      MATCH (recipe)-[:USES]->(excluded:Ingredient)
+      WHERE excluded.name IN blocked
+    }
+  )
   AND (
     size($cuisines) = 0
     OR EXISTS {
@@ -16,39 +35,25 @@ export const ELIGIBILITY_FILTERS = `
       WHERE cuisine.name IN $cuisines
     }
   )
+RETURN recipe.id AS id,
+       matched,
+       COUNT { (recipe)-[:USES]->() } - matched AS missing,
+       recipe.minutes AS minutes,
+       recipe.ratingAverage AS ratingAverage
 `;
 
-export const COUNT_QUERY = `
+export const SEARCH_RECORDS_QUERY = `
 MATCH (recipe:Recipe)
-WHERE ${ELIGIBILITY_FILTERS}
-RETURN count(recipe) AS totalCount
-`;
-
-export const SEARCH_QUERY = `
-MATCH (recipe:Recipe)
-WHERE ${ELIGIBILITY_FILTERS}
+WHERE recipe.id IN $ids
 OPTIONAL MATCH (recipe)-[:USES]->(ingredient:Ingredient)
-WITH recipe, collect(DISTINCT ingredient.name) AS ingredientNames
-WITH recipe, ingredientNames,
-     [name IN ingredientNames WHERE name IN $included] AS matchedNames,
-     [name IN ingredientNames WHERE NOT name IN $included] AS missingNames,
-     [name IN ingredientNames WHERE name IN $excluded] AS excludedNames
-WITH recipe, ingredientNames, matchedNames, missingNames, excludedNames,
-     size(missingNames) AS missingCount,
-     size(matchedNames) AS matchedCount,
-     size(excludedNames) AS excludedCount
-WHERE $cursorMissing IS NULL
-   OR missingCount > $cursorMissing
-   OR (missingCount = $cursorMissing AND matchedCount < $cursorMatched)
-   OR (missingCount = $cursorMissing AND matchedCount = $cursorMatched
-       AND excludedCount > $cursorExcluded)
-   OR (missingCount = $cursorMissing AND matchedCount = $cursorMatched
-       AND excludedCount = $cursorExcluded AND recipe.id > $cursorId)
 RETURN recipe.id AS id, recipe.name AS name, recipe.minutes AS minutes,
-       ingredientNames AS ingredientNames, missingCount AS missingCount,
-       matchedCount AS matchedCount, excludedCount AS excludedCount
-ORDER BY missingCount ASC, matchedCount DESC, excludedCount ASC, id ASC
-LIMIT $limit
+       collect(DISTINCT ingredient.name) AS ingredientNames
+`;
+
+export const GRAPH_STATE_QUERY = `
+MATCH (marker:RecipeGraphMetadata {key: 'recipe-import'})
+RETURN toString(marker.completedAt) AS identity,
+       coalesce(marker.ratingFieldsReady, false) AS ratingFieldsReady
 `;
 
 export const RECIPE_DETAIL_QUERY = `

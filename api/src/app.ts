@@ -5,6 +5,7 @@ import { IngredientsService } from './application/services/ingredients.service.j
 import type { IngredientsRepository } from './core/ingredients/ingredients.repository.js';
 import { RecipesService } from './application/services/recipes.service.js';
 import type { AccountsService } from './application/services/accounts.service.js';
+import type { RecipeCandidateCache } from './core/recipes/recipe-search.cache.js';
 import type { RecipesRepository } from './core/recipes/recipes.repository.js';
 import { apiErrorHandler } from './interface/http/api-error.js';
 import { createApiRouter } from './interface/http/api-router.js';
@@ -15,12 +16,13 @@ export function createApiApp(
     recipeSearchRepository?: RecipesRepository,
     accountsService?: AccountsService,
     readinessCheck?: () => Promise<void>,
-    trustProxyHops = 0
+    trustProxyHops = 0,
+    recipeCandidateCache?: RecipeCandidateCache
 ) {
     const app = express();
     if (trustProxyHops > 0) app.set('trust proxy', trustProxyHops);
     const ingredientService = new IngredientsService(ingredientRepository);
-    const recipeService = new RecipesService(recipeSearchRepository);
+    const recipeService = new RecipesService(recipeSearchRepository, recipeCandidateCache);
 
     app.get('/health', async (_request, response) => {
         try {
