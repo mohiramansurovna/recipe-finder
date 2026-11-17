@@ -64,11 +64,13 @@ The backend already supports recipe search, filters, cursor pagination, and reci
 
 #### FR-3: Search by ingredient fit
 
-The API shall accept included and excluded ingredients, excluded categories, selected cuisines, an optional supported maximum cooking time, and an optional cursor. Results shall be ordered by fewest missing ingredients, then most matched ingredients, then fewest excluded-ingredient matches, then stable recipe ID.
+The API shall accept included ingredients, excluded ingredients, excluded categories, selected cuisines, an optional supported maximum cooking time, an optional minimum rating, and an optional cursor. A search shall contain at least one included ingredient; otherwise the API shall return an explicit client error. Results contain only recipes that use at least one included ingredient; a recipe containing any excluded ingredient or any ingredient in an excluded category is omitted. Results shall be ordered by most matched ingredients, then fewest missing ingredients, then stable recipe ID.
+
+A minimum rating (supported values 3 and 4) shall omit recipes whose combined rating (see FR-6 and FR-20) is lower than the value or that have no rating; without it, unrated recipes remain in results. Rating is a filter and never changes the order.
 
 #### FR-4: Continue search consistently
 
-The API shall return a cursor for subsequent pages. A cursor shall be bound to the canonical ingredient, category, cuisine, and cooking-time criteria; reusing it with different criteria shall return an explicit client error.
+The API shall return a cursor for subsequent pages. A cursor shall be bound to the canonical ingredient, category, cuisine, cooking-time, and minimum-rating criteria; reusing it with different criteria shall return an explicit client error.
 
 #### FR-5: Retrieve recipe details
 
@@ -132,7 +134,7 @@ An authenticated person shall be able to add and remove favorite recipes and ret
 
 #### FR-16: Delete an account without identifying retained ratings
 
-When an account is deleted, the system shall remove its favorites, sessions, and account data and retain any ratings only after removing their link to the deleted identity. The retained ratings shall remain anonymous.
+When an account is deleted, the system shall remove its favorites, sessions, and account data and retain any ratings only after removing their link to the deleted identity. The retained ratings shall remain anonymous. A stored rating shall hold only its numeric value; the account's ownership of it shall exist only as a link that is removed on deletion, and no account identifier, recipe identifier copy, or timestamp shall be stored on the rating itself.
 
 #### FR-17: Verify email addresses
 
@@ -236,7 +238,7 @@ The Android demo includes account registration and email verification, password 
 
 - Ingredient vocabulary and category endpoints.
 - Deterministic ingredient parsing, including aliases, conservative typo handling, category exclusions, and unrecognized terms.
-- Recipe search with cuisine/category/time filters, fit ranking, page counts, and criteria-bound cursor pagination.
+- Recipe search with cuisine/category/time/minimum-rating filters, match-count ranking, page counts, and criteria-bound cursor pagination.
 - Recipe detail API with ingredients, cuisines, instructions, and anonymous source ratings.
 - Dataset preparation and guarded graph import.
 - API validation, error responses, health check, and rate limiting.
@@ -264,7 +266,7 @@ Decide the basis for recommendations, and whether to add a session-management sc
 
 - **Privacy:** never persist or expose dataset contributor identities; keep account identity separate from ratings displayed to other users.
 - **Security:** keep Neo4j private, protect credentials and deployment state, validate inputs, and rate limit API requests. Passwords shall be stored only as salted hashes and refresh tokens only in hashed form. Verification credentials shall be single-use, expiring, and limited in the number of attempts. The Android client shall keep session credentials in secure device storage and use HTTPS for the public demo. Because the demo API is publicly reachable without access control, only synthetic disposable accounts may be used there.
-- **Performance:** the existing project target is about one second for a typical first search page on demo hardware; this is an unvalidated target and must be measured before it is treated as an acceptance threshold. The Android client shall keep network calls off the main thread so the interface stays responsive while loading.
+- **Performance:** the existing project target is about one second for a typical first search page on demo hardware; this is an unvalidated target and must be measured before it is treated as an acceptance threshold. A first search with a given set of ingredients may take longer than later pages of the same search, which the service may serve from a short-lived cache; the Android client shall show a loading state during the first search. The Android client shall keep network calls off the main thread so the interface stays responsive while loading.
 - **Reproducibility:** a clean checkout with local prepared data shall support the documented backend and graph setup, and the Android client shall build from a documented procedure and use a configurable backend URL.
 - **Testability:** parsing shall have unit coverage; search and detail behavior shall have API and graph integration coverage; account, session, rating, and favorite behavior shall have API tests including updating an existing rating and ending sessions; API behavior shall remain verified during structural changes. The Android client shall have unit tests for its state and error handling logic.
 - **Data governance:** prepared data shall contain only fields needed by the product, and raw/prepared dataset files shall not be committed.
