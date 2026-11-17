@@ -1,6 +1,7 @@
 import type { Driver, Record as Neo4jRecord } from 'neo4j-driver';
 
 import { withSession } from './neo4j-sessions.js';
+import { MARK_RATING_FIELDS_READY_QUERY, REFRESH_ALL_RATINGS_QUERY } from './rating-averages.js';
 
 const RECIPE_CONSTRAINTS = [
     { label: 'Recipe', property: 'id' },
@@ -108,6 +109,8 @@ export async function migrateAccountSchema(driver: Driver, database: string): Pr
                 `CREATE CONSTRAINT ${constraint.name} IF NOT EXISTS FOR (node:${constraint.label}) REQUIRE node.${constraint.property} IS UNIQUE`,
             );
         }
+        await session.run(REFRESH_ALL_RATINGS_QUERY);
+        await session.run(MARK_RATING_FIELDS_READY_QUERY);
         const constraints = await showConstraints(session);
         for (const required of ACCOUNT_CONSTRAINTS) {
             if (!constraints.some((constraint) => isConstraintPresent(constraint, required.label, required.property))) {

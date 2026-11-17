@@ -8,7 +8,6 @@ import type {
   IngredientAlias,
   IngredientsRepository,
 } from "../api/src/core/ingredients/ingredients.repository.js";
-import type { RecipeSearchPage } from "../api/src/core/recipes/recipes.types.js";
 import type { RecipesRepository } from "../api/src/core/recipes/recipes.repository.js";
 
 const invalidRequests: { description: string; body: Record<string, unknown> | undefined }[] = [
@@ -50,8 +49,20 @@ class TestRecipeSearchRepository implements RecipesRepository {
     return null;
   }
 
-  async search(): Promise<RecipeSearchPage> {
-    return { recipes: [], totalCount: 0, nextCursor: null };
+  async findSearchCandidates() {
+    return [];
+  }
+
+  async getSearchRecords() {
+    return [];
+  }
+
+  async getGraphIdentity() {
+    return "test-graph";
+  }
+
+  async isRatingFilterAvailable() {
+    return true;
   }
 }
 

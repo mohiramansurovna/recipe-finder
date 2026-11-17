@@ -5,6 +5,8 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 import { createApiApp } from "../api/src/app.js";
+import { RecipesService } from "../api/src/application/services/recipes.service.js";
+import { REFRESH_ALL_RATINGS_QUERY } from "../api/src/infrastructure/neo4j/rating-averages.js";
 import { Neo4jIngredientsRepository } from "../api/src/infrastructure/neo4j/repositories/ingredients.neo4j.repository.js";
 import { Neo4jRecipesRepository } from "../api/src/infrastructure/neo4j/repositories/recipes.neo4j.repository.js";
 
@@ -39,7 +41,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         { id: `${prefix}-rank-01`, name: "Best fit", minutes: 15 },
         { id: `${prefix}-rank-02`, name: "Excluded match", minutes: 20 },
         { id: `${prefix}-rank-03`, name: "Fewer matches", minutes: 15 },
-        { id: `${prefix}-rank-04`, name: "One missing", minutes: 15 },
+        { id: `${prefix}-rank-04`, name: "One missing", minutes: 15, aggregateRating: 4.2 },
         { id: `${prefix}-rank-05`, name: "Unknown time", minutes: null },
         { id: `${prefix}-alias-search`, name: "Canonical alias match", minutes: 18 },
         { id: `${prefix}-seafood`, name: "Seafood recipe", minutes: 12 },
@@ -95,7 +97,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         await seedSession.run(
           `UNWIND $recipes AS row
            CREATE (recipe:Recipe {id: row.id, name: row.name})
-           SET recipe.minutes = row.minutes`,
+           SET recipe.minutes = row.minutes, recipe.aggregateRating = row.aggregateRating`,
           { recipes: seedRecipes },
         );
         await seedSession.run(
@@ -158,11 +160,30 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
             ],
           },
         );
+        await seedSession.run(
+          `UNWIND $ratings AS row
+           MATCH (recipe:Recipe {id: row.recipe})
+           CREATE (recipe)-[:HAS_RATING]->(:Rating {value: row.value})`,
+          {
+            ratings: [
+              { recipe: `${prefix}-rank-01`, value: 5 },
+              { recipe: `${prefix}-rank-01`, value: 4 },
+              { recipe: `${prefix}-rank-02`, value: 3 },
+              { recipe: `${prefix}-rank-03`, value: 2 },
+            ],
+          },
+        );
+        await seedSession.run(REFRESH_ALL_RATINGS_QUERY);
+        await seedSession.run(
+          `CREATE (:RecipeGraphMetadata {key: 'recipe-import', completed: true,
+                   completedAt: datetime(), ratingFieldsReady: true})`,
+        );
       } finally {
         await seedSession.close();
       }
 
       const repository = new Neo4jRecipesRepository(driver, database);
+      const service = new RecipesService(repository);
       const app = createApiApp(
         new Neo4jIngredientsRepository(driver, database),
         100,
@@ -195,157 +216,87 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
         .send({ ...parsedCriteria, maxMinutes: null, cursor: null })
         .expect(200)
         .expect((response) => {
-          expect(response.body.recipes).toContainEqual(
-            expect.objectContaining({
-              id: `${prefix}-alias-search`,
-              matchedIngredients: parsedCriteria.included,
-              excludedIngredients: parsedCriteria.excluded,
-            }),
-          );
+          const ids = response.body.recipes.map((recipe: { id: string }) => recipe.id);
+          expect(ids).not.toContain(`${prefix}-alias-search`); // uses an excluded ingredient
+          expect(ids).toContain(`${prefix}-rank-05`);
+        });
+      await request(app)
+        .post("/api/recipes/search")
+        .send({ included: [], excluded: [`${prefix}-butter`] })
+        .expect(400)
+        .expect((response) => {
+          expect(response.body.error.code).toBe("INGREDIENTS_REQUIRED");
         });
 
-      const anyTimePage = await repository.search({
-        included: [`${prefix}-chicken`, `${prefix}-rice`],
-        excluded: [`${prefix}-butter`],
-        excludedCategories: [],
-        cuisines: [],
-        maxMinutes: null,
-        cursor: null,
-      });
-      expect(anyTimePage.totalCount).toBe(seedRecipes.length);
-      const rankedIds = anyTimePage.recipes.map((recipe) => recipe.id);
-      expect(rankedIds.slice(0, 4)).toEqual([
-        `${prefix}-rank-01`,
-        `${prefix}-rank-05`,
-        `${prefix}-rank-02`,
-        `${prefix}-rank-03`,
+      const search = (change: Record<string, unknown>) =>
+        service.search({
+          included: [`${prefix}-chicken`, `${prefix}-rice`],
+          excluded: [],
+          excludedCategories: [],
+          cuisines: [],
+          maxMinutes: null,
+          minRating: null,
+          cursor: null,
+          ...change,
+        });
+      const ids = (page: { recipes: { id: string }[] }) => page.recipes.map((recipe) => recipe.id);
+      const id = (name: string) => `${prefix}-${name}`;
+
+      // Most matched first, then fewest missing, then id; recipes sharing nothing are absent.
+      const ranked = await search({});
+      expect(ids(ranked)).toEqual([
+        id("rank-01"),
+        id("rank-02"),
+        id("rank-05"),
+        id("rank-03"),
+        id("alias-search"),
+        id("rank-04"),
       ]);
-      expect(rankedIds).toContain(`${prefix}-rank-05`);
-      expect(
-        anyTimePage.recipes.find((recipe) => recipe.id === `${prefix}-rank-02`)
-          ?.excludedIngredients,
-      ).toEqual([`${prefix}-butter`]);
+      expect(ranked.totalCount).toBe(6);
+      expect(ranked.nextCursor).toBeNull();
 
-      const limitedPage = await repository.search({
-        included: [`${prefix}-chicken`, `${prefix}-rice`],
-        excluded: [`${prefix}-butter`],
-        excludedCategories: [],
-        cuisines: [],
-        maxMinutes: 15,
-        cursor: null,
-      });
-      expect(limitedPage.totalCount).toBe(4);
-      const limitedIds = limitedPage.recipes.map((recipe) => recipe.id);
-      expect(limitedIds).toContain(`${prefix}-rank-01`);
-      expect(limitedIds).not.toContain(`${prefix}-rank-02`);
-      expect(limitedIds).not.toContain(`${prefix}-rank-05`);
-      expect(
-        limitedPage.recipes.find((recipe) => recipe.id === `${prefix}-rank-04`)
-          ?.missingIngredients,
-      ).toContain(`${prefix}-tomato`);
+      // Excluded ingredients hide recipes.
+      const excluded = await search({ excluded: [`${prefix}-butter`] });
+      expect(ids(excluded)).toEqual([id("rank-01"), id("rank-05")]);
+      expect(excluded.totalCount).toBe(2);
 
-      const dairyExcluded = await repository.search({
-        included: [`${prefix}-chicken`, `${prefix}-rice`],
-        excluded: [],
-        excludedCategories: ["dairy"],
-        cuisines: [],
-        maxMinutes: null,
-        cursor: null,
-      });
-      expect(dairyExcluded.totalCount).toBe(seedRecipes.length - 3);
-      const dairyExcludedIds = dairyExcluded.recipes.map((recipe) => recipe.id);
-      expect(dairyExcludedIds).not.toContain(`${prefix}-rank-02`);
-      expect(dairyExcludedIds).not.toContain(`${prefix}-alias-search`);
-      expect(dairyExcludedIds).toContain(`${prefix}-rank-01`);
+      // Excluded categories hide recipes.
+      expect(ids(await search({ excludedCategories: ["dairy"] }))).toEqual([id("rank-01"), id("rank-05")]);
 
-      const vegetarian = await repository.search({
-        included: [],
-        excluded: [],
-        excludedCategories: ["meat", "fish/seafood"],
-        cuisines: [],
-        maxMinutes: null,
-        cursor: null,
-      });
-      expect(vegetarian.totalCount).toBe(25);
-      const vegetarianIds = vegetarian.recipes.map((recipe) => recipe.id);
-      expect(vegetarianIds).not.toContain(`${prefix}-rank-01`);
-      expect(vegetarianIds).not.toContain(`${prefix}-seafood`);
-      expect(vegetarianIds).toContain(`${prefix}-page-000`);
+      // Time filter hides slower recipes and recipes with no time.
+      const quick = await search({ maxMinutes: 15 });
+      expect(ids(quick)).toEqual([id("rank-01"), id("rank-03"), id("rank-04")]);
+      expect(quick.totalCount).toBe(3);
+      expect((await search({ maxMinutes: 0 })).totalCount).toBe(0);
+
+      // Rating filter: individual average, dataset fallback, unrated hidden, order unchanged.
+      expect(ids(await search({ minRating: 4 }))).toEqual([id("rank-01"), id("rank-04")]);
+      expect(ids(await search({ minRating: 3 }))).toEqual([id("rank-01"), id("rank-02"), id("rank-04")]);
+
+      // Cuisine filter uses OR semantics across selections.
+      expect(ids(await search({ included: [`${prefix}-chicken`, `${prefix}-salmon`], cuisines: ["Italian"] }))).toEqual([
+        id("seafood"),
+        id("rank-01"),
+      ]);
+      expect(ids(await search({ cuisines: ["Mexican"] }))).toEqual([id("rank-02")]);
 
       expect(await repository.getCuisineNames()).toEqual(["Italian", "Mexican"]);
-      const selectedCuisines = await repository.search({
-        included: [],
-        excluded: [],
-        excludedCategories: [],
-        cuisines: ["Italian", "Mexican"],
-        maxMinutes: null,
-        cursor: null,
-      });
-      expect(selectedCuisines.totalCount).toBe(3);
-      const selectedCuisineIds = new Set(
-        selectedCuisines.recipes.map((recipe) => recipe.id),
-      );
-      expect(selectedCuisineIds).toEqual(
-        new Set([
-          `${prefix}-rank-01`,
-          `${prefix}-rank-02`,
-          `${prefix}-seafood`,
-        ]),
-      );
 
-      const firstBrowsePage = await repository.search({
-        included: [],
-        excluded: [],
-        excludedCategories: [],
-        cuisines: [],
-        maxMinutes: null,
-        cursor: null,
-      });
-      expect(firstBrowsePage.totalCount).toBe(seedRecipes.length);
-      expect(firstBrowsePage.recipes.map((recipe) => recipe.id)).toEqual(
-        Array.from(
-          { length: 20 },
-          (_, index) => `${prefix}-page-${String(index).padStart(3, "0")}`,
-        ),
+      // Cursor pages cover every candidate exactly once.
+      const pageSearch = (cursor: string | null) =>
+        search({
+          included: Array.from({ length: 25 }, (_, index) => `${prefix}-page ingredient ${index}`),
+          cursor,
+        });
+      const firstPage = await pageSearch(null);
+      expect(firstPage.recipes).toHaveLength(20);
+      expect(firstPage.totalCount).toBe(25);
+      expect(firstPage.nextCursor).not.toBeNull();
+      const secondPage = await pageSearch(firstPage.nextCursor);
+      expect([...ids(firstPage), ...ids(secondPage)]).toEqual(
+        Array.from({ length: 25 }, (_, index) => id(`page-${String(index).padStart(3, "0")}`)),
       );
-      expect(firstBrowsePage.nextCursor).not.toBeNull();
-
-      const secondBrowsePage = await repository.search({
-        included: [],
-        excluded: [],
-        excludedCategories: [],
-        cuisines: [],
-        maxMinutes: null,
-        cursor: firstBrowsePage.nextCursor,
-      });
-      expect(secondBrowsePage.totalCount).toBe(firstBrowsePage.totalCount);
-      expect(secondBrowsePage.recipes.map((recipe) => recipe.id)).toEqual(
-        Array.from(
-          { length: 6 },
-          (_, index) => `${prefix}-page-${String(index + 20).padStart(3, "0")}`,
-        )
-          .slice(0, 5)
-          .concat(
-            `${prefix}-rank-05`,
-            `${prefix}-seafood`,
-            `${prefix}-rank-01`,
-            `${prefix}-rank-03`,
-            `${prefix}-alias-search`,
-            `${prefix}-rank-02`,
-            `${prefix}-rank-04`,
-          ),
-      );
-      expect(secondBrowsePage.nextCursor).toBeNull();
-
-      const emptyPage = await repository.search({
-        included: [],
-        excluded: [],
-        excludedCategories: [],
-        cuisines: [],
-        maxMinutes: 0,
-        cursor: null,
-      });
-      expect(emptyPage).toEqual({ recipes: [], totalCount: 0, nextCursor: null });
+      expect(secondPage.nextCursor).toBeNull();
     } finally {
       if (dataSeeded) {
         const cleanupSession = driver.session({ database });
@@ -355,6 +306,7 @@ describe.skipIf(testConfig === undefined)("Neo4j recipe search integration", () 
              WHERE (node:Recipe AND node.id STARTS WITH $prefix)
                 OR (node:Ingredient AND node.name STARTS WITH $prefix)
                 OR ((node:IngredientCategory OR node:Cuisine) AND node.testRun = $testRun)
+                OR node:Rating OR node:RecipeGraphMetadata
              DETACH DELETE node`,
             { prefix: `${prefix}-`, testRun: prefix },
           );

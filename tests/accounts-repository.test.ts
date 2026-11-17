@@ -575,5 +575,6 @@ describe('Neo4j account repository concurrency handling', () => {
         expect(session.executeWrite).toHaveBeenCalledOnce();
         expect(queries.some(({ query }) => query.includes('SET rating.value = $value'))).toBe(true);
         expect(queries.some(({ query }) => query.includes('CREATE (rating:Rating'))).toBe(false);
+        expect(queries.some(({ query }) => query.includes('SET recipe.ratingAverage'))).toBe(true);
     });
 });

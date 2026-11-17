@@ -100,6 +100,13 @@ describe('account schema migration and readiness', () => {
         expect(strip[0]).toContain('rating.updatedAt');
     });
 
+    it('backfills recipe rating averages and marks the graph ready', async () => {
+        const { driver, queries } = makeDriver();
+        await migrateAccountSchema(driver, 'neo4j');
+        expect(queries.some((query) => query.includes('SET recipe.ratingAverage'))).toBe(true);
+        expect(queries.some((query) => query.includes('SET metadata.ratingFieldsReady = true'))).toBe(true);
+    });
+
     it('creates account uniqueness constraints idempotently and validates readiness', async () => {
         const { driver, queries } = makeDriver();
         await migrateAccountSchema(driver, 'neo4j');

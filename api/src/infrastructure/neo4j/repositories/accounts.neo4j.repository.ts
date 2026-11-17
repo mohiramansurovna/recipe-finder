@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import type { Driver, ManagedTransaction } from 'neo4j-driver';
+import { REFRESH_RECIPE_RATING_QUERY } from '../rating-averages.js';
 
 import {
     AccountAlreadyExistsError,
@@ -890,7 +891,10 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                     { accountId: command.accountId, recipeId: command.recipeId, value: command.value },
                 );
                 const updatedRecord = updated.records[0];
-                if (updatedRecord !== undefined && asNumber(updatedRecord.get('updated')) > 0) return;
+                if (updatedRecord !== undefined && asNumber(updatedRecord.get('updated')) > 0) {
+                    await transaction.run(REFRESH_RECIPE_RATING_QUERY, { recipeId: command.recipeId });
+                    return;
+                }
                 await transaction.run(
                     `MATCH (account:Account {id: $accountId})
                      MATCH (recipe:Recipe {id: $recipeId})
@@ -899,6 +903,7 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                      CREATE (recipe)-[:HAS_RATING]->(rating)`,
                     { accountId: command.accountId, recipeId: command.recipeId, value: command.value },
                 );
+                await transaction.run(REFRESH_RECIPE_RATING_QUERY, { recipeId: command.recipeId });
             }),
         );
     }
@@ -923,6 +928,7 @@ export class Neo4jAccountsRepository implements AccountsRepository {
                      DETACH DELETE rating`,
                     { accountId: command.accountId, recipeId: command.recipeId },
                 );
+                await transaction.run(REFRESH_RECIPE_RATING_QUERY, { recipeId: command.recipeId });
             }),
         );
     }

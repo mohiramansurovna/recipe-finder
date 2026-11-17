@@ -6,6 +6,7 @@ import neo4j from 'neo4j-driver';
 import { z } from 'zod';
 
 import type { RecipeSearchCriteria } from '../api/src/core/recipes/recipes.types.js';
+import { RecipesService } from '../api/src/application/services/recipes.service.js';
 import { Neo4jRecipesRepository } from '../api/src/infrastructure/neo4j/repositories/recipes.neo4j.repository.js';
 
 const configSchema = z.object({
@@ -21,7 +22,7 @@ type Scenario = {
     pages: number;
 };
 
-const base = { excluded: [], excludedCategories: [], cuisines: [], maxMinutes: null } as const;
+const base = { excluded: [], excludedCategories: [], cuisines: [], maxMinutes: null, minRating: null } as const;
 
 export const SCENARIOS: readonly Scenario[] = [
     { name: 'rare x1', criteria: { ...base, included: ['15 bean mix'] }, pages: 1 },
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
     const runs = Number(process.env['BENCHMARK_RUNS'] ?? '3');
     const driver = neo4j.driver(config.NEO4J_URI, neo4j.auth.basic(config.NEO4J_USER, config.NEO4J_PASSWORD));
     try {
-        const repository = new Neo4jRecipesRepository(driver, config.NEO4J_DATABASE);
+        const repository = new RecipesService(new Neo4jRecipesRepository(driver, config.NEO4J_DATABASE));
         await repository.getCuisineNames(); // warm the connection
         console.log(`Search benchmark (${runs} runs each; times are per full scenario, in ms)`);
         for (const scenario of SCENARIOS) {

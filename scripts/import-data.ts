@@ -1,3 +1,4 @@
+import { REFRESH_ALL_RATINGS_QUERY } from "../api/src/infrastructure/neo4j/rating-averages.js";
 import { createReadStream } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -627,10 +628,12 @@ export async function importPreparedData(
     await runBatched(recipeCuisineRows(dataDirectory), (batch) =>
       writeRecipeCuisineBatch(session, batch),
     );
+    await session.run(REFRESH_ALL_RATINGS_QUERY);
     await session.run(
       `MERGE (metadata:RecipeGraphMetadata {key: 'recipe-import'})
        SET metadata.completed = true,
-           metadata.completedAt = datetime()`,
+           metadata.completedAt = datetime(),
+           metadata.ratingFieldsReady = true`,
     );
   } finally {
     await Promise.all([session.close(), activeDriver.close()]);
