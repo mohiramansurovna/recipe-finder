@@ -88,7 +88,7 @@ context:
 
 ## Open Questions (need a decision before approval)
 
-1. **Size:** TTL is decided (sliding 1 minute); are about 20 entries and a per-entry row cap right for the demo host, and is its memory budget known?
+1. **Size (decided):** sliding 1-minute TTL and 20 entries. A per-entry row cap is still to be set from the benchmark. The cache stays in-process behind a core port; Redis was considered and rejected for now (extra service and cost for a single API instance), and the port allows adding it later.
 2. **Graph change:** is adding `Recipe.ingredientCount` plus an index acceptable (needs a migration for existing local and demo graphs), or must the graph stay untouched, which means the first page stays near ~1 s but remainder ordering is slower?
 3. **First-page target:** is "about 1 s" still the goal, or is a slower first search with a loading state acceptable on the client (the Android side will add loading text either way)?
 
