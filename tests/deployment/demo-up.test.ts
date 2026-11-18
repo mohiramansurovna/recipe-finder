@@ -37,13 +37,13 @@ function writeExecutable(path: string, content: string) {
 function makeValidCurrentReview(readme: string) {
   return readme
     .replace(
-      "- [ ] Re-review the current deployment code and configuration before any new provisioning; the 2026-11-04 review does not cover these changes.",
-      "- [x] Re-review the current deployment code and configuration before any new provisioning; the 2026-11-04 review does not cover these changes.",
+      /^- \[[ x]\] (Re-review the current deployment code and configuration .*)$/m,
+      "- [x] $1",
     )
-    .replace("**Current deployment reviewer**: _Not reviewed_", "**Current deployment reviewer**: Test Operator")
-    .replace("**Current deployment review date**: _Not reviewed_", "**Current deployment review date**: 2026-11-07")
+    .replace(/^\*\*Current deployment reviewer\*\*: .*$/m, "**Current deployment reviewer**: Test Operator")
+    .replace(/^\*\*Current deployment review date\*\*: .*$/m, "**Current deployment review date**: 2026-11-07")
     .replace(
-      "**Current approval to provision billable AWS resources**: _Not granted_",
+      /^\*\*Current approval to provision billable AWS resources\*\*: .*$/m,
       "**Current approval to provision billable AWS resources**: Granted for this deployment on 2026-11-07",
     );
 }
@@ -126,9 +126,6 @@ describe("demo launch safety gates", () => {
       "DEMO_ESTIMATED_COST_USD=1",
       "DEMO_BUDGET_LIMIT_USD=5",
       "DEMO_BUDGET_EMAIL=operator@example.com",
-      "EMAIL_PROVIDER=resend",
-      "RESEND_API_KEY=re_test",
-      "EMAIL_FROM=recipe@example.com",
       "VERIFICATION_CODE_SECRET=12345678901234567890123456789012",
     ].join("\n"));
     const result = runBash(
@@ -197,9 +194,6 @@ describe("demo launch safety gates", () => {
         "DEMO_ESTIMATED_COST_USD=1",
         "DEMO_BUDGET_LIMIT_USD=5",
         "DEMO_BUDGET_EMAIL=operator@example.com",
-        "EMAIL_PROVIDER=resend",
-        "RESEND_API_KEY=re_test",
-        "EMAIL_FROM=recipe@example.com",
         "VERIFICATION_CODE_SECRET=12345678901234567890123456789012",
       ].join("\n"),
     );
@@ -322,7 +316,7 @@ esac
   it("writes the deployment environment with root-only permissions and verifies SSH host keys", () => {
     expect(launchScript).toContain("StrictHostKeyChecking=yes");
     expect(launchScript).not.toContain("StrictHostKeyChecking=no");
-    expect(launchScript).toContain('"EMAIL_PROVIDER=$EMAIL_PROVIDER"');
+    expect(launchScript).not.toContain("RESEND_API_KEY");
     expect(launchScript).toContain("sudo sh -c 'umask 077; cat > /opt/recipe-graph/.env.demo'");
     expect(launchScript).toContain("sudo chown ubuntu:ubuntu /opt/recipe-graph");
   });

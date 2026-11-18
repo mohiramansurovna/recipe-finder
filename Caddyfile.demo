@@ -1,3 +1,10 @@
 {$DEMO_HOSTNAME} {
-	reverse_proxy api:3000
+	redir /mailpit /mailpit/
+	handle /mailpit/* {
+		# Authentication is enforced by Mailpit itself (MP_UI_AUTH).
+		reverse_proxy mailpit:8025
+	}
+	handle {
+		reverse_proxy api:3000
+	}
 }

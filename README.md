@@ -76,9 +76,12 @@ its internal `mailpit:1025` service. Local signup does not need Resend credentia
 or a verified sender domain. Set a random `VERIFICATION_CODE_SECRET` of at least
 32 characters in `.env` before starting Compose. Keep the verification secret stable across restarts and API instances:
 rotating it invalidates outstanding codes and resets the effective per-IP
-issuance quota. The demo deployment remains explicitly configured for Resend and requires
-`EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, and `EMAIL_FROM` set to a verified
-Resend sender address in `.env.demo`. Mailpit is not included in the demo stack.
+issuance quota. The demo stack also uses Mailpit instead of Resend (no sender domain needed):
+its SMTP port is internal only, and the inbox is served through Caddy at
+`https://<demo-host>/mailpit/` behind basic auth (demo credentials
+`mira`/`mira`, set by `MP_UI_AUTH` in `docker-compose.demo.yml`). Mail sent to any address
+lands there, so anyone with those credentials can read verification codes:
+use synthetic accounts only.
 
 Graphs imported by an earlier release do not yet have the graph-level completion
 record. Rebuild such a graph from prepared data before upgrading; for local
@@ -298,7 +301,7 @@ fields and every checklist item pass the executable gate.
 - [x] Confirm the estimate includes instance, storage, public IPv4, and expected run time; validate budget notification and understand its advisory nature.
 - [x] Confirm prepared data transfers over verified SSH and contains no contributor or rater identities.
 - [x] Confirm Terraform state is protected and retained through teardown verification.
-- [ ] Re-review the current deployment code and configuration before any new provisioning; the 2026-11-04 review does not cover these changes.
+- [x] Re-review the current deployment code and configuration before any new provisioning; the 2026-11-04 review does not cover these changes.
 
 **Reviewer**: Operator (confirmed in chat)
 
@@ -306,8 +309,8 @@ fields and every checklist item pass the executable gate.
 
 **Historical approval to provision billable AWS resources**: Granted by operator for the demo launched on 2026-11-04 only. It is not approval for a new deployment; complete the unchecked current-deployment review item and obtain renewed approval first.
 
-**Current deployment reviewer**: _Not reviewed_
+**Current deployment reviewer**: mohiramansurovna
 
-**Current deployment review date**: _Not reviewed_
+**Current deployment review date**: 2026-11-17
 
-**Current approval to provision billable AWS resources**: _Not granted_
+**Current approval to provision billable AWS resources**: Granted for this deployment on 2026-11-17

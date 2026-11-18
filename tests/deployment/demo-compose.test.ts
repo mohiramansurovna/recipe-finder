@@ -26,11 +26,16 @@ describe("demo API-only deployment", () => {
     expect(workflow).not.toContain("recipe-finder-web");
   });
 
-  it("uses Resend explicitly and keeps development mail capture out of the demo", () => {
-    expect(compose).toContain('EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER=resend in .env.demo}"');
-    expect(compose).toContain("RESEND_API_KEY");
-    expect(compose).not.toMatch(/^\s{2}mailpit:/m);
-    expect(compose).not.toContain("SMTP_HOST");
-    expect(compose).not.toContain("SMTP_PORT");
+  it("captures demo email in Mailpit exposed only at /mailpit behind basic auth", () => {
+    expect(compose).toContain("EMAIL_PROVIDER: smtp");
+    expect(compose).toContain("SMTP_HOST: mailpit");
+    expect(compose).not.toContain("RESEND_API_KEY");
+    const mailpit = compose.slice(compose.indexOf("  mailpit:"), compose.indexOf("  redis:"));
+    expect(mailpit).toContain("MP_UI_AUTH:");
+    expect(mailpit).toContain("MP_WEBROOT: /mailpit/");
+    expect(mailpit).not.toContain("ports:");
+    expect(caddy).toContain("handle /mailpit/*");
+    expect(caddy).toContain("reverse_proxy mailpit:8025");
+    expect(caddy).not.toContain("1025");
   });
 });

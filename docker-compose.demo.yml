@@ -1,6 +1,17 @@
 name: recipe-graph-demo
 
 services:
+  # Demo mail capture: SMTP is internal only; the web inbox is reachable solely
+  # through Caddy at /mailpit behind HTTP basic auth (demo credentials).
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    restart: unless-stopped
+    environment:
+      MP_WEBROOT: /mailpit/
+      MP_UI_AUTH: mira:mira
+      MP_MAX_MESSAGES: "500"
+    mem_limit: 128m
+
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
@@ -74,16 +85,19 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: "${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env.demo}"
       NEO4J_DATABASE: neo4j
       REDIS_URL: redis://redis:6379
-      EMAIL_PROVIDER: "${EMAIL_PROVIDER:?Set EMAIL_PROVIDER=resend in .env.demo}"
-      RESEND_API_KEY: "${RESEND_API_KEY:?Set RESEND_API_KEY in .env.demo}"
+      EMAIL_PROVIDER: smtp
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
       VERIFICATION_CODE_SECRET: "${VERIFICATION_CODE_SECRET:?Set VERIFICATION_CODE_SECRET in .env.demo}"
-      EMAIL_FROM: "${EMAIL_FROM:?Set EMAIL_FROM in .env.demo}"
+      EMAIL_FROM: noreply@recipe-graph.demo.test
       TRUST_PROXY_HOPS: "1"
     healthcheck:
       test:
